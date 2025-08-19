@@ -1,0 +1,17 @@
+{
+  "database": {
+    "path": "//192.168.1.200/共有/製造課/ロボパット/python app/cleaning_instructions.db"
+  },
+  "colors": {
+    "instruction_1": "#FF0000",
+    "instruction_2": "#FFC0CB",
+    "instruction_3": "#0000FF",
+    "instruction_4": "#FFFF00",
+    "set_fg_today": "#0000FF",
+    "set_fg_other_day": "#FFFF00"
+  },
+  "remarks_options": [
+    "出荷無し",
+    "1st外観"
+  ]
+}
