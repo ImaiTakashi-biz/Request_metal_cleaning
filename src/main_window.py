@@ -4,139 +4,190 @@ from PySide6.QtWidgets import (
     QTableView, QCalendarWidget, QPushButton,
     QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView
 )
-from PySide6.QtCore import QDate, Slot, Qt
+from PySide6.QtCore import QDate, Slot, Qt, QEvent, QModelIndex # Added QEvent, QModelIndex
 
 from config import load_config
 from database import DatabaseHandler
 from models import CleaningTableModel, ComboBoxDelegate, EditableComboBoxDelegate
 
-MODERN_STYLESHEET = """
-/* Modern Flat UI Stylesheet */
+FINAL_STYLESHEET = """
+/* Modern & Sophisticated UI Stylesheet */
 
 QMainWindow, QWidget {
-    background-color: #F5F5F5; /* Off-white background */
-    font-family: 'Segoe UI', 'Meiryo UI', 'MS PGothic', sans-serif;
+    background-color: #F8F9FA; /* Very light gray, almost white */
+    font-family: 'Noto Sans JP', 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif; /* Modern font stack */
+    color: #343A40; /* Darker text for better contrast */
+    font-size: 14px;
 }
 
 #mainTitle {
-    font-size: 22px;
-    font-weight: bold;
-    color: #0053a6; /* Corporate Blue */
-    padding: 10px 5px;
+    font-size: 28px; /* Larger title */
+    font-weight: 700; /* Bolder */
+    color: #2C48B3; /* Corporate blue */
+    padding: 15px 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #E9ECEF; /* Subtle separator */
 }
 
 QPushButton {
-    background-color: #007BFF;
+    background-color: #3457D5; /* Corporate blue */
     color: white;
     border: none;
-    padding: 8px 16px;
-    font-size: 14px;
-    border-radius: 4px;
+    padding: 12px 22px; /* Slightly larger padding */
+    font-size: 15px; /* Slightly larger font */
+    font-weight: 600;
+    border-radius: 8px; /* More rounded corners */
+    min-width: 120px;
+    transition: background-color 0.3s ease; /* Smooth transition */
 }
 QPushButton:hover {
-    background-color: #0056b3;
+    background-color: #2C48B3; /* Darker blue on hover */
 }
 QPushButton:pressed {
-    background-color: #004494;
+    background-color: #1A3A9A; /* Even darker on press */
 }
 
-/* CheckBox Styling */
-QCheckBox {
-    color: #212121;
-    spacing: 5px;
-}
-QCheckBox::indicator {
-    border: 1px solid #B0B0B0;
-    border-radius: 3px;
-    width: 15px;
-    height: 15px;
+/* Consistent styling for input widgets */
+QComboBox, QLineEdit {
     background-color: #FFFFFF;
-}
-QCheckBox::indicator:checked {
-    background-color: #007BFF;
-    border-color: #007BFF;
-}
-
-/* ComboBox Styling */
-QComboBox {
-    background-color: #FFFFFF;
-    border: 1px solid #D0D0D0;
-    border-radius: 4px;
-    padding: 5px;
-    color: #212121; /* Dark text for dropdown */
+    border: 1px solid #CED4DA; /* Lighter border */
+    border-radius: 8px; /* More rounded */
+    padding: 8px 12px; /* More padding */
+    color: #495057; /* Slightly softer text color */
+    font-size: 14px;
+    min-height: 32px;
 }
 QComboBox::drop-down {
     border: none;
+    width: 20px;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
 }
 QComboBox QAbstractItemView {
     background-color: #FFFFFF;
-    border: 1px solid #D0D0D0;
-    selection-background-color: #E8E8E8; /* Gray selection */
-    selection-color: #212121;
-    color: #212121;
+    border: 1px solid #CED4DA;
+    selection-background-color: #E9ECEF; /* Subtle selection */
+    selection-color: #343A40;
+    color: #343A40;
     outline: 0px;
-}
-QComboBox QAbstractItemView::item {
-    color: #212121;
-    padding: 5px;
+    border-radius: 8px;
 }
 
-/* TableView Styling */
+/* CheckBox */
+QCheckBox {
+    color: #343A40;
+    spacing: 8px; /* More spacing */
+    font-size: 14px;
+}
+QCheckBox::indicator {
+    border: 1px solid #ADB5BD; /* Softer border */
+    border-radius: 4px; /* Slightly more rounded */
+    width: 18px; /* Larger indicator */
+    height: 18px;
+    background-color: #FFFFFF;
+}
+QCheckBox::indicator:hover {
+    border: 1px solid #3457D5;
+}
+QCheckBox::indicator:checked {
+    background-color: #3457D5;
+    border-color: #3457D5;
+}
+
+/* Table */
 QTableView {
     background-color: #FFFFFF;
-    border: 1px solid #E0E0E0;
-    gridline-color: #E0E0E0;
+    border: 1px solid #E9ECEF; /* Subtle border for the whole table */
+    border-radius: 8px; /* Rounded corners for the table */
+    gridline-color: #F1F3F5;
     font-size: 14px;
+    alternate-background-color: #FDFDFD;
+    selection-background-color: #E9ECEF; /* Consistent selection color */
+    selection-color: #343A40;
+    outline: 0; /* Remove focus outline */
 }
 QTableView::item {
-    padding: 5px;
-    color: #212121;
+    padding: 10px 12px; /* More padding for items */
+    border-bottom: 1px solid #E9ECEF; /* Lighter separator */
+    color: #343A40;
 }
 QTableView::item:selected {
-    background-color: #E8E8E8; /* Subtle gray selection */
-    color: #212121;
+    background-color: #E9ECEF;
+    color: #343A40;
 }
 
-/* Header Styling */
+/* Table Header */
 QHeaderView::section {
-    background-color: #F5F5F5;
-    padding: 6px;
+    background-color: #F8F9FA; /* Lighter header background */
+    padding: 12px 12px; /* More padding */
     border: none;
-    border-bottom: 1px solid #E0E0E0;
+    border-bottom: 2px solid #DEE2E6;
     font-size: 14px;
-    font-weight: bold;
-    color: #212121; /* Dark text for header */
+    font-weight: 600;
+    color: #495057; /* Softer header text */
+    text-align: left; /* Align text to left */
+}
+QHeaderView::section:last {
+    border-right: none;
 }
 
-/* Calendar Widget Styling */
+/* Calendar */
+QCalendarWidget {
+    background-color: #FFFFFF;
+    border-radius: 8px; /* More rounded */
+    border: 1px solid #E9ECEF; /* Subtle border */
+    padding: 10px;
+}
 QCalendarWidget QToolButton {
-    color: white;
-    background-color: #007BFF;
-    border: none;
-    padding: 8px;
-    border-radius: 4px;
-    font-size: 14px;
-    margin: 2px;
+    color: #3457D5; /* Corporate blue for navigation buttons */
+    background-color: transparent;
+    font-size: 18px; /* Larger navigation arrows */
+    font-weight: 600;
+    border-radius: 5px;
 }
-QCalendarWidget QMenu {
-    background-color: white;
-}
-QCalendarWidget QSpinBox {
-    background-color: white;
-    border: 1px solid #E0E0E0;
-    padding: 4px;
+QCalendarWidget QToolButton:hover {
+    background-color: #E9ECEF;
 }
 QCalendarWidget QWidget#qt_calendar_navigationbar {
-    background-color: #007BFF;
+    background-color: #F8F9FA; /* Lighter navigation bar */
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 5px;
 }
 QCalendarWidget QTableView {
-    selection-background-color: #007BFF;
+    selection-background-color: #3457D5; /* Corporate blue for selected date */
     selection-color: white;
     border: none;
+    gridline-color: #F1F3F5;
+    font-size: 14px;
+}
+QCalendarWidget QTableView QHeaderView::section {
+    background-color: #FFFFFF;
+    border: none;
+    padding: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #6C757D; /* Softer day names */
+}
+QCalendarWidget QTableView::item:hover {
+    background-color: #E9ECEF; /* Subtle hover effect */
+}
+QCalendarWidget QTableView::item:selected {
+    background-color: #3457D5;
+    color: white;
+    border-radius: 4px; /* Slightly rounded selected date */
+}
+QCalendarWidget QTableView::item:disabled {
+    color: #ADB5BD; /* Disabled dates */
 }
 
+/* Status Bar */
 QStatusBar {
-    font-size: 12px;
+    font-size: 13px;
+    background-color: #F8F9FA;
+    border-top: 1px solid #DEE2E6;
+    color: #495057;
+    padding: 5px 10px;
 }
 """
 
@@ -145,55 +196,61 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("洗浄依頼管理アプリ")
         self.setGeometry(100, 100, 1200, 800)
+        self.showMaximized()
 
         self.config = load_config()
         if not self.config:
             self.show_critical_error("設定ファイル 'config.json' が見つからないか、不正です。")
             sys.exit(1)
-        
+
         self.db_handler = DatabaseHandler(self.config['database']['path'])
-        
+
         self.setup_ui()
-        
+
         self.table_model = CleaningTableModel(config=self.config)
         self.table_view.setModel(self.table_model)
 
         self.setup_delegates()
-        self.setup_table_columns() # 新しいメソッド呼び出し
+        self.setup_table_columns()
 
         self.connect_to_db_and_load_data()
 
         self.refresh_button.clicked.connect(self.load_data_for_selected_date)
         self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
         self.table_model.db_update_signal.connect(self.update_database_record)
+        self.table_view.clicked.connect(self.handle_table_click) # Connect clicked signal
+        self.calendar.installEventFilter(self) # Install event filter for calendar
 
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(20, 20, 20, 20) # Increased margins
+        main_layout.setSpacing(20) # Increased spacing
 
         title_label = QLabel("洗浄依頼管理")
         title_label.setObjectName("mainTitle")
 
         top_panel = QHBoxLayout()
-        
+        top_panel.setSpacing(20) # Increased spacing
+
         self.calendar = QCalendarWidget()
         self.calendar.setFixedWidth(400)
-        
+
         self.refresh_button = QPushButton("🔄 データ更新")
-        
+
         control_panel = QVBoxLayout()
         control_panel.addWidget(self.refresh_button)
-        control_panel.addStretch()
 
         top_panel.addWidget(self.calendar)
         top_panel.addLayout(control_panel)
+        top_panel.addStretch() # Add stretch to top_panel for horizontal optimization
 
         self.table_view = QTableView()
         self.table_view.setSortingEnabled(True)
+        self.table_view.setShowGrid(False)
         self.table_view.setAlternatingRowColors(True)
+        self.table_view.setEditTriggers(QTableView.NoEditTriggers) # Disable default editing triggers
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -205,23 +262,21 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.table_view)
 
     def setup_table_columns(self):
-        """テーブルの列のサイズモードと初期幅を個別に設定する"""
         header = self.table_view.horizontalHeader()
+        product_name_index = -1
+
         for i in range(self.table_model.columnCount()):
             col_name = self.table_model._headers[i]
             if col_name in ["remarks", "cleaning_instruction"]:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
-                self.table_view.setColumnWidth(i, 100)
+                self.table_view.setColumnWidth(i, 150) # Increased width for these columns
+            elif col_name == "product_name":
+                product_name_index = i
             else:
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
-        
-        # 最後の列（洗浄指示）を可変ではなく、内容に合わせるように変更
-        last_col_index = self.table_model.columnCount() - 1
-        if self.table_model._headers[last_col_index] not in ["remarks", "cleaning_instruction"]:
-             header.setSectionResizeMode(last_col_index, QHeaderView.Stretch)
-        else:
-             # もし最後の列が固定幅の列だった場合、その一つ前をストレッチさせるなど、要件に応じて調整
-             pass
+
+        if product_name_index != -1:
+            header.setSectionResizeMode(product_name_index, QHeaderView.Stretch)
 
     def setup_delegates(self):
         try:
@@ -240,6 +295,18 @@ class MainWindow(QMainWindow):
         except ValueError:
             print("Warning: 'remarks' column not found.")
 
+    @Slot(QModelIndex) # New slot for single-click editing
+    def handle_table_click(self, index):
+        if index.isValid():
+            col_name = self.table_model._headers[index.column()]
+            if col_name in ["cleaning_instruction", "remarks"]:
+                self.table_view.edit(index)
+
+    def eventFilter(self, obj, event): # Event filter for calendar
+        if obj == self.calendar and event.type() == QEvent.Type.Wheel:
+            return True # Consume the event
+        return super().eventFilter(obj, event)
+
     @Slot()
     def connect_to_db_and_load_data(self):
         if self.db_handler.connect():
@@ -252,9 +319,9 @@ class MainWindow(QMainWindow):
     def load_data_for_selected_date(self):
         selected_date = self.calendar.selectedDate().toString("yyyy-MM-dd")
         self.status_label.setText(f"{selected_date} のデータを読み込み中...")
-        
+
         data, error = self.db_handler.get_data_by_date(selected_date)
-        
+
         if error:
             self.table_model.load_data([])
             self.status_label.setText(f"エラー: {error}")
@@ -262,7 +329,6 @@ class MainWindow(QMainWindow):
         else:
             self.table_model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
-            # self.table_view.resizeColumnsToContents() # 個別設定に切り替えたため不要に
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):
@@ -287,7 +353,7 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setStyleSheet(MODERN_STYLESHEET) # スタイルシートをアプリ全体に適用
+    app.setStyleSheet(FINAL_STYLESHEET)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
