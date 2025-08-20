@@ -1,6 +1,45 @@
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QStyledItemDelegate, QComboBox
 import datetime
+
+class ComboBoxDelegate(QStyledItemDelegate):
+    """QComboBoxをテーブルセル内に表示するためのデリゲート"""
+    def __init__(self, parent=None, items=None):
+        super().__init__(parent)
+        self.items = items or []
+
+    def createEditor(self, parent, option, index):
+        editor = QComboBox(parent)
+        editor.addItems(self.items)
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, Qt.EditRole)
+        if value in self.items:
+            editor.setCurrentText(str(value))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.EditRole)
+
+class EditableComboBoxDelegate(QStyledItemDelegate):
+    """編集可能なQComboBoxをテーブルセル内に表示するためのデリゲート"""
+    def __init__(self, parent=None, items=None):
+        super().__init__(parent)
+        self.items = items or []
+
+    def createEditor(self, parent, option, index):
+        editor = QComboBox(parent)
+        editor.addItems(self.items)
+        editor.setEditable(True)
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, Qt.EditRole)
+        editor.setCurrentText(str(value))
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.EditRole)
 
 class CleaningTableModel(QAbstractTableModel):
     db_update_signal = Signal(int, str, object)
@@ -9,12 +48,12 @@ class CleaningTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._data = data or []
         self._config = config or {}
-        # カラム名を「前日セット」に変更し、順序を定義
+        
         self._headers = [
             "machine_no", 
             "manufacturing_check", 
             "cleaning_check", 
-            "前日セット", # App-only Field
+            "前日セット",
             "part_number", 
             "product_name", 
             "customer_name", 
@@ -22,7 +61,21 @@ class CleaningTableModel(QAbstractTableModel):
             "remarks", 
             "cleaning_instruction",
         ]
-        self._hidden_fields = ["set_date", "completion_date", "id"] 
+        
+        self._display_headers = {
+            "machine_no": "機番",
+            "manufacturing_check": "製造check",
+            "cleaning_check": "洗浄check",
+            "前日セット": "セット",
+            "part_number": "品番",
+            "product_name": "品名",
+            "customer_name": "客先名",
+            "next_process": "次工程",
+            "remarks": "備考",
+            "cleaning_instruction": "洗浄指示",
+        }
+        
+        self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date"]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self._data)
@@ -32,7 +85,8 @@ class CleaningTableModel(QAbstractTableModel):
 
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self._headers[section]
+            col_name = self._headers[section]
+            return self._display_headers.get(col_name, col_name)
         return None
 
     def data(self, index, role=Qt.DisplayRole):
@@ -42,9 +96,9 @@ class CleaningTableModel(QAbstractTableModel):
         row_data = self._data[index.row()]
         col_name = self._headers[index.column()]
 
-        if role == Qt.DisplayRole:
+        if role == Qt.DisplayRole or role == Qt.EditRole:
             if col_name in ["manufacturing_check", "cleaning_check", "前日セット"]:
-                return None # チェックボックス列はテキスト非表示
+                return None
             return row_data.get(col_name, "")
 
         if role == Qt.CheckStateRole:
@@ -60,18 +114,18 @@ class CleaningTableModel(QAbstractTableModel):
                 color_key = f"instruction_{instruction}"
                 if color_key in color_map:
                     color = QColor(color_map[color_key])
-                    color.setAlpha(100) # 色を半透明にする (0-255)
+                    color.setAlpha(100)
                     return color
 
             if col_name == "前日セット":
                 set_color = self._get_set_checkbox_color(row_data)
                 if set_color:
-                    return set_color # QColorオブジェクトを直接返す
+                    return set_color
 
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
-        if not index.isValid() or role not in [Qt.CheckStateRole, Qt.EditRole]:
+        if not index.isValid():
             return False
 
         row = index.row()
@@ -80,7 +134,7 @@ class CleaningTableModel(QAbstractTableModel):
         if record_id is None: return False
 
         if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check"]:
-            new_value = (value == Qt.Checked)
+            new_value = bool(value)
             self._data[row][col_name] = new_value
             self.db_update_signal.emit(record_id, col_name, new_value)
             self.dataChanged.emit(index, index, [role])
@@ -95,18 +149,16 @@ class CleaningTableModel(QAbstractTableModel):
         return False
 
     def flags(self, index):
-        flags = super().flags(index)
+        base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        if not index.isValid():
+            return base_flags
         col_name = self._headers[index.column()]
-
-        # デフォルトですべて編集不可に設定
-        flags &= ~Qt.ItemIsEditable
-
         if col_name in ["manufacturing_check", "cleaning_check"]:
-            flags |= Qt.ItemIsUserCheckable
+            return base_flags | Qt.ItemIsUserCheckable
         elif col_name in ["remarks", "cleaning_instruction"]:
-            flags |= Qt.ItemIsEditable
-        
-        return flags
+            return base_flags | Qt.ItemIsEditable
+        else:
+            return base_flags
 
     def load_data(self, new_data):
         self.beginResetModel()
@@ -115,21 +167,33 @@ class CleaningTableModel(QAbstractTableModel):
 
     def _is_set_logically(self, row_data):
         set_date_str = row_data.get("set_date")
-        if not set_date_str: return False
+        acquisition_date_str = row_data.get("acquisition_date")
+        if not set_date_str or not acquisition_date_str: return False
         try:
-            set_date = datetime.date.fromisoformat(set_date_str)
-            yesterday = datetime.date.today() - datetime.timedelta(days=1)
-            return set_date == yesterday
+            set_date = datetime.date.fromisoformat(str(set_date_str).split(' ')[0])
+            acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
+            weekday = acquisition_date.weekday()
+            if weekday == 6: delta = datetime.timedelta(days=2)
+            elif weekday == 0: delta = datetime.timedelta(days=3)
+            else: delta = datetime.timedelta(days=1)
+            logical_yesterday = acquisition_date - delta
+            return set_date == logical_yesterday
         except (ValueError, TypeError): return False
 
     def _get_set_checkbox_color(self, row_data):
         if not self._is_set_logically(row_data): return None
         completion_date_str = row_data.get("completion_date")
+        acquisition_date_str = row_data.get("acquisition_date")
         colors = self._config.get("colors", {})
-        if not completion_date_str: return QColor(colors.get("set_fg_other_day"))
         try:
-            completion_date = datetime.date.fromisoformat(completion_date_str)
-            today = datetime.date.today()
-            return QColor(colors.get("set_fg_today") if completion_date == today else colors.get("set_fg_other_day"))
-        except (ValueError, TypeError): return QColor(colors.get("set_fg_other_day"))
+            acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
+            if not completion_date_str:
+                return QColor(colors.get("set_fg_other_day", "#FFFF00"))
+            completion_date = datetime.date.fromisoformat(str(completion_date_str).split(' ')[0])
+            if completion_date == acquisition_date:
+                return QColor(colors.get("set_fg_today", "#0000FF"))
+            else:
+                return QColor(colors.get("set_fg_other_day", "#FFFF00"))
+        except (ValueError, TypeError):
+            return QColor(colors.get("set_fg_other_day", "#FFFF00"))
 

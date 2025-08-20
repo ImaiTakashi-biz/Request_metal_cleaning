@@ -8,7 +8,7 @@ from PySide6.QtCore import QDate, Slot, Qt
 
 from config import load_config
 from database import DatabaseHandler
-from models import CleaningTableModel
+from models import CleaningTableModel, ComboBoxDelegate, EditableComboBoxDelegate
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -30,6 +30,9 @@ class MainWindow(QMainWindow):
         # --- モデルの初期化とテーブルへの設定 ---
         self.table_model = CleaningTableModel(config=self.config)
         self.table_view.setModel(self.table_model)
+
+        # --- デリゲートの設定 ---
+        self.setup_delegates()
 
         # --- 接続とデータロード ---
         self.connect_to_db_and_load_data()
@@ -62,7 +65,8 @@ class MainWindow(QMainWindow):
         self.table_view = QTableView()
         self.table_view.setSortingEnabled(True)
         self.table_view.setAlternatingRowColors(True)
-        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        # ユーザーが列幅を自由に変更できるようにする
+        self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
 
         # --- ステータスバー ---
         self.status_bar = QStatusBar()
@@ -73,6 +77,26 @@ class MainWindow(QMainWindow):
         # --- レイアウトへの追加 ---
         main_layout.addWidget(top_panel)
         main_layout.addWidget(self.table_view)
+
+    def setup_delegates(self):
+        """テーブルビューにカスタムデリゲートを設定する"""
+        # 洗浄指示 (編集可能なドロップダウン)
+        try:
+            col_index = self.table_model._headers.index("cleaning_instruction")
+            items = ["", "1", "2", "3", "4"]
+            delegate = EditableComboBoxDelegate(items=items, parent=self.table_view)
+            self.table_view.setItemDelegateForColumn(col_index, delegate)
+        except ValueError:
+            print("Warning: 'cleaning_instruction' column not found.")
+
+        # 備考 (編集可能なドロップダウン)
+        try:
+            col_index = self.table_model._headers.index("remarks")
+            items = ["出荷無し", "1st外観"]
+            delegate = EditableComboBoxDelegate(items=items, parent=self.table_view)
+            self.table_view.setItemDelegateForColumn(col_index, delegate)
+        except ValueError:
+            print("Warning: 'remarks' column not found.")
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -98,6 +122,13 @@ class MainWindow(QMainWindow):
         else:
             self.table_model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
+            # データロード後に列幅を調整
+            self.table_view.resizeColumnsToContents()
+            try:
+                remarks_col_index = self.table_model._headers.index("remarks")
+                self.table_view.setColumnWidth(remarks_col_index, 200)
+            except ValueError:
+                pass # カラムがなければ何もしない
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):
