@@ -4,13 +4,13 @@ from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
     QTableView, QCalendarWidget, QPushButton,
     QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView,
-    QTableWidget, QTableWidgetItem
+    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup
 )
 from PySide6.QtCore import QDate, Slot, Qt, QEvent, QModelIndex
 
 from config import load_config
 from database import DatabaseHandler
-from models import CleaningTableModel, ComboBoxDelegate, EditableComboBoxDelegate
+from models import MainTableModel, CleaningInstructionTableModel, ComboBoxDelegate, EditableComboBoxDelegate
 
 FINAL_STYLESHEET = """
 /* Modern & Sophisticated UI Stylesheet */
@@ -55,6 +55,19 @@ QPushButton:hover {
 QPushButton:pressed {
     background-color: #1A3A9A; /* Even darker on press */
 }
+
+QPushButton.page-button {
+    background-color: #E9ECEF;
+    color: #495057;
+    font-weight: 500;
+}
+
+QPushButton.page-button:checked {
+    background-color: #3457D5;
+    color: white;
+    font-weight: 600;
+}
+
 
 /* Consistent styling for input widgets */
 QComboBox, QLineEdit {
@@ -216,8 +229,12 @@ class MainWindow(QMainWindow):
 
         self.setup_ui()
 
-        self.table_model = CleaningTableModel(config=self.config)
-        self.table_view.setModel(self.table_model)
+        # --- モデルの初期化 ---
+        self.main_table_model = MainTableModel(config=self.config)
+        self.main_table_view.setModel(self.main_table_model)
+
+        self.cleaning_table_model = CleaningInstructionTableModel(config=self.config)
+        self.cleaning_table_view.setModel(self.cleaning_table_model)
 
         self.setup_delegates()
         self.setup_table_columns()
@@ -225,10 +242,18 @@ class MainWindow(QMainWindow):
         self.connect_to_db_and_load_data()
 
         # --- シグナルとスロットの接続 ---
+        self.page_button_group.idClicked.connect(self.pages_stack.setCurrentIndex)
+
         self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
-        self.table_model.db_update_signal.connect(self.update_database_record)
-        self.table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
-        self.table_view.clicked.connect(self.handle_table_click)
+        
+        self.main_table_model.db_update_signal.connect(self.update_database_record)
+        self.main_table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
+        
+        self.cleaning_table_model.db_update_signal.connect(self.update_database_record)
+        self.cleaning_table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
+
+        self.main_table_view.clicked.connect(self.handle_table_click)
+        self.cleaning_table_view.clicked.connect(self.handle_table_click)
         self.calendar.installEventFilter(self)
 
     def setup_ui(self):
@@ -241,6 +266,7 @@ class MainWindow(QMainWindow):
         title_label = QLabel("洗浄依頼管理")
         title_label.setObjectName("mainTitle")
 
+        # --- 上部固定パネル ---
         top_panel = QHBoxLayout()
         top_panel.setSpacing(20)
 
@@ -250,7 +276,6 @@ class MainWindow(QMainWindow):
         self.calendar.setFixedWidth(400)
         top_panel.addWidget(self.calendar)
 
-        # 製造払い出し未機番リスト表示エリア
         unprocessed_widget = QWidget()
         unprocessed_layout = QVBoxLayout(unprocessed_widget)
         unprocessed_title = QLabel("製造未払い出し機番")
@@ -265,63 +290,83 @@ class MainWindow(QMainWindow):
         unprocessed_layout.addWidget(self.unprocessed_table)
         top_panel.addWidget(unprocessed_widget)
 
-        top_panel.addStretch()
+        # --- ページ切り替えボタン ---
+        page_button_layout = QHBoxLayout()
+        self.main_page_button = QPushButton("Main")
+        self.main_page_button.setCheckable(True)
+        self.main_page_button.setProperty("class", "page-button")
+        
+        self.cleaning_page_button = QPushButton("洗浄指示管理")
+        self.cleaning_page_button.setCheckable(True)
+        self.cleaning_page_button.setProperty("class", "page-button")
 
-        self.table_view = QTableView()
-        self.table_view.setSortingEnabled(True)
-        self.table_view.setShowGrid(False)
-        self.table_view.setAlternatingRowColors(True)
-        self.table_view.setEditTriggers(QTableView.NoEditTriggers)
+        self.page_button_group = QButtonGroup(self)
+        self.page_button_group.addButton(self.main_page_button, 0)
+        self.page_button_group.addButton(self.cleaning_page_button, 1)
+        self.main_page_button.setChecked(True) # 初期状態
+
+        page_button_layout.addWidget(self.main_page_button)
+        page_button_layout.addWidget(self.cleaning_page_button)
+        page_button_layout.addStretch()
+
+        # --- ページスタック ---
+        self.pages_stack = QStackedWidget()
+        self.main_table_view = QTableView()
+        self.cleaning_table_view = QTableView()
+        self.pages_stack.addWidget(self.main_table_view)
+        self.pages_stack.addWidget(self.cleaning_table_view)
+
+        # --- 全体レイアウト ---
+        main_layout.addWidget(title_label)
+        main_layout.addLayout(top_panel)
+        main_layout.addLayout(page_button_layout)
+        main_layout.addWidget(self.pages_stack)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_label = QLabel("準備完了")
         self.status_bar.addWidget(self.status_label)
 
-        main_layout.addWidget(title_label)
-        main_layout.addLayout(top_panel)
-        main_layout.addWidget(self.table_view)
-
     def setup_table_columns(self):
-        header = self.table_view.horizontalHeader()
-        product_name_index = -1
-
-        for i in range(self.table_model.columnCount()):
-            col_name = self.table_model._headers[i]
-            if col_name in ["remarks", "cleaning_instruction"]:
-                header.setSectionResizeMode(i, QHeaderView.Fixed)
-                self.table_view.setColumnWidth(i, 150)
-            elif col_name == "product_name":
-                product_name_index = i
-            else:
-                header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
-
-        if product_name_index != -1:
-            header.setSectionResizeMode(product_name_index, QHeaderView.Stretch)
+        # Mainテーブル
+        header = self.main_table_view.horizontalHeader()
+        for i in range(self.main_table_model.columnCount()):
+            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        # Cleaningテーブル
+        header = self.cleaning_table_view.horizontalHeader()
+        for i in range(self.cleaning_table_model.columnCount()):
+            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
     def setup_delegates(self):
+        # Mainテーブルのデリゲート
         try:
-            col_index = self.table_model._headers.index("cleaning_instruction")
-            items = ["", "1", "2", "3", "4"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.table_view)
-            self.table_view.setItemDelegateForColumn(col_index, delegate)
-        except ValueError:
-            print("Warning: 'cleaning_instruction' column not found.")
+            col_index = self.main_table_model._headers.index("remarks")
+            items = self.config.get("remarks_options", ["出荷無し", "1st外観"])
+            delegate = EditableComboBoxDelegate(items=items, parent=self.main_table_view)
+            self.main_table_view.setItemDelegateForColumn(col_index, delegate)
+        except ValueError: pass
 
+        # 洗浄指示管理テーブルのデリゲート
         try:
-            col_index = self.table_model._headers.index("remarks")
-            items = ["出荷無し", "1st外観"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.table_view)
-            self.table_view.setItemDelegateForColumn(col_index, delegate)
-        except ValueError:
-            print("Warning: 'remarks' column not found.")
+            col_index = self.cleaning_table_model._headers.index("cleaning_instruction")
+            items = ["", "1", "2", "3", "4"]
+            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view)
+            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
+        except ValueError: pass
 
     @Slot(QModelIndex)
     def handle_table_click(self, index):
-        if index.isValid():
-            col_name = self.table_model._headers[index.column()]
-            if col_name in ["cleaning_instruction", "remarks"]:
-                self.table_view.edit(index)
+        if not index.isValid(): return
+        # クリックされたテーブルビューを特定
+        sender_table = self.sender()
+        if sender_table == self.main_table_view:
+            col_name = self.main_table_model._headers[index.column()]
+            if col_name == "remarks":
+                sender_table.edit(index)
+        elif sender_table == self.cleaning_table_view:
+            col_name = self.cleaning_table_model._headers[index.column()]
+            if col_name == "cleaning_instruction":
+                sender_table.edit(index)
 
     def eventFilter(self, obj, event):
         if obj == self.calendar and event.type() == QEvent.Type.Wheel:
@@ -330,8 +375,9 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def refresh_unprocessed_list_from_model(self):
-        if self.table_model:
-            self.update_unprocessed_table(self.table_model._data)
+        # どちらのモデルのデータを使っても同じ結果になるはず
+        if self.main_table_model:
+            self.update_unprocessed_table(self.main_table_model._data)
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -349,11 +395,13 @@ class MainWindow(QMainWindow):
         data, error = self.db_handler.get_data_by_date(selected_date)
 
         if error:
-            self.table_model.load_data([])
+            self.main_table_model.load_data([])
+            self.cleaning_table_model.load_data([])
             self.status_label.setText(f"エラー: {error}")
             QMessageBox.warning(self, "データベースエラー", f"データの読み込みに失敗しました。\n\n詳細: {error}")
         else:
-            self.table_model.load_data(data)
+            self.main_table_model.load_data(data)
+            self.cleaning_table_model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
             self.update_unprocessed_table(data)
 

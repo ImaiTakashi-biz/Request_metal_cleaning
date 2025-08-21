@@ -41,7 +41,8 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         model.setData(index, editor.currentText(), Qt.EditRole)
 
-class CleaningTableModel(QAbstractTableModel):
+class BaseTableModel(QAbstractTableModel):
+    """モデルの共通ロジックを持つベースクラス"""
     db_update_signal = Signal(int, str, object)
     data_changed_for_unprocessed_list = Signal()
 
@@ -49,34 +50,9 @@ class CleaningTableModel(QAbstractTableModel):
         super().__init__(parent)
         self._data = data or []
         self._config = config or {}
-        
-        self._headers = [
-            "machine_no", 
-            "manufacturing_check", 
-            "cleaning_check", 
-            "前日セット",
-            "part_number", 
-            "product_name", 
-            "customer_name", 
-            "next_process", 
-            "remarks", 
-            "cleaning_instruction",
-        ]
-        
-        self._display_headers = {
-            "machine_no": "機番",
-            "manufacturing_check": "製造",
-            "cleaning_check": "洗浄",
-            "前日セット": "セット",
-            "part_number": "品番",
-            "product_name": "品名",
-            "customer_name": "客先名",
-            "next_process": "次工程",
-            "remarks": "備考",
-            "cleaning_instruction": "洗浄指示",
-        }
-        
-        self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date"]
+        self._headers = []
+        self._display_headers = {}
+        self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date", "quantity", "material_id"]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self._data)
@@ -89,79 +65,6 @@ class CleaningTableModel(QAbstractTableModel):
             col_name = self._headers[section]
             return self._display_headers.get(col_name, col_name)
         return None
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-
-        row_data = self._data[index.row()]
-        col_name = self._headers[index.column()]
-
-        if role == Qt.DisplayRole or role == Qt.EditRole:
-            if col_name in ["manufacturing_check", "cleaning_check", "前日セット"]:
-                return None
-            return row_data.get(col_name, "")
-
-        if role == Qt.CheckStateRole:
-            if col_name in ["manufacturing_check", "cleaning_check"]:
-                return Qt.Checked if bool(row_data.get(col_name)) else Qt.Unchecked
-            if col_name == "前日セット":
-                return Qt.Checked if self._is_set_logically(row_data) else Qt.Unchecked
-        
-        if role == Qt.BackgroundRole:
-            if col_name == 'machine_no':
-                instruction = str(row_data.get("cleaning_instruction", ""))
-                color_map = self._config.get("colors", {})
-                color_key = f"instruction_{instruction}"
-                if color_key in color_map:
-                    color = QColor(color_map[color_key])
-                    color.setAlpha(100)
-                    return color
-
-            if col_name == "前日セット":
-                set_color = self._get_set_checkbox_color(row_data)
-                if set_color:
-                    return set_color
-
-        return None
-
-    def setData(self, index, value, role=Qt.EditRole):
-        if not index.isValid():
-            return False
-
-        row = index.row()
-        col_name = self._headers[index.column()]
-        record_id = self._data[row].get("id")
-        if record_id is None: return False
-
-        if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check"]:
-            new_value = bool(value)
-            self._data[row][col_name] = new_value
-            self.db_update_signal.emit(record_id, col_name, new_value)
-            self.dataChanged.emit(index, index, [role])
-            self.data_changed_for_unprocessed_list.emit() # リアルタイム更新のためにシグナルを発行
-            return True
-        
-        if role == Qt.EditRole and col_name in ["remarks", "cleaning_instruction"]:
-            self._data[row][col_name] = value
-            self.db_update_signal.emit(record_id, col_name, value)
-            self.dataChanged.emit(index, index, [role])
-            self.data_changed_for_unprocessed_list.emit() # リアルタイム更新のためにシグナルを発行
-            return True
-
-        return False
-
-    def flags(self, index):
-        base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
-        if not index.isValid():
-            return base_flags
-        col_name = self._headers[index.column()]
-        if col_name in ["manufacturing_check", "cleaning_check"]:
-            return base_flags | Qt.ItemIsUserCheckable
-        elif col_name in ["remarks", "cleaning_instruction"]:
-            return base_flags | Qt.ItemIsEditable
-        else:
-            return base_flags
 
     def load_data(self, new_data):
         self.beginResetModel()
@@ -200,3 +103,167 @@ class CleaningTableModel(QAbstractTableModel):
         except (ValueError, TypeError):
             return QColor(colors.get("set_fg_other_day", "#FFFF00"))
 
+class MainTableModel(BaseTableModel):
+    """Mainページ用のテーブルモデル"""
+    def __init__(self, data=None, config=None, parent=None):
+        super().__init__(data, config, parent)
+        self._headers = [
+            "machine_no", 
+            "manufacturing_check", 
+            "cleaning_check", 
+            "前日セット",
+            "part_number", 
+            "product_name", 
+            "customer_name", 
+            "next_process", 
+            "remarks",
+        ]
+        self._display_headers = {
+            "machine_no": "機番",
+            "manufacturing_check": "製造",
+            "cleaning_check": "洗浄",
+            "前日セット": "セット",
+            "part_number": "品番",
+            "product_name": "品名",
+            "customer_name": "客先名",
+            "next_process": "次工程",
+            "remarks": "備考",
+        }
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid(): return None
+        row_data = self._data[index.row()]
+        col_name = self._headers[index.column()]
+
+        if role == Qt.DisplayRole or role == Qt.EditRole:
+            if col_name in ["manufacturing_check", "cleaning_check", "前日セット"]:
+                return None
+            return row_data.get(col_name, "")
+
+        if role == Qt.CheckStateRole:
+            if col_name in ["manufacturing_check", "cleaning_check"]:
+                return Qt.Checked if bool(row_data.get(col_name)) else Qt.Unchecked
+            if col_name == "前日セット":
+                return Qt.Checked if self._is_set_logically(row_data) else Qt.Unchecked
+        
+        if role == Qt.BackgroundRole:
+            if col_name == 'machine_no':
+                instruction = str(row_data.get("cleaning_instruction", ""))
+                color_map = self._config.get("colors", {})
+                color_key = f"instruction_{instruction}"
+                if color_key in color_map:
+                    color = QColor(color_map[color_key])
+                    color.setAlpha(100)
+                    return color
+            if col_name == "前日セット":
+                set_color = self._get_set_checkbox_color(row_data)
+                if set_color:
+                    return set_color
+        return None
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if not index.isValid(): return False
+        row = index.row()
+        col_name = self._headers[index.column()]
+        record_id = self._data[row].get("id")
+        if record_id is None: return False
+
+        if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check"]:
+            new_value = bool(value)
+            self._data[row][col_name] = new_value
+            self.db_update_signal.emit(record_id, col_name, new_value)
+            self.dataChanged.emit(index, index, [role])
+            self.data_changed_for_unprocessed_list.emit()
+            return True
+        
+        if role == Qt.EditRole and col_name == "remarks":
+            self._data[row][col_name] = value
+            self.db_update_signal.emit(record_id, col_name, value)
+            self.dataChanged.emit(index, index, [role])
+            return True
+
+        return False
+
+    def flags(self, index):
+        base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        if not index.isValid(): return base_flags
+        col_name = self._headers[index.column()]
+        if col_name in ["manufacturing_check", "cleaning_check"]:
+            return base_flags | Qt.ItemIsUserCheckable
+        elif col_name == "remarks":
+            return base_flags | Qt.ItemIsEditable
+        return base_flags
+
+class CleaningInstructionTableModel(BaseTableModel):
+    """洗浄指示管理ページ用のテーブルモデル"""
+    def __init__(self, data=None, config=None, parent=None):
+        super().__init__(data, config, parent)
+        self._headers = [
+            "set_date", "machine_no", "customer_name", "part_number", 
+            "product_name", "quantity", "completion_date", "material_id", "cleaning_instruction"
+        ]
+        self._display_headers = {
+            "set_date": "セット予定日",
+            "machine_no": "機番",
+            "customer_name": "客先名",
+            "part_number": "品番",
+            "product_name": "製品名",
+            "quantity": "数量",
+            "completion_date": "加工終了日",
+            "material_id": "材質識別",
+            "cleaning_instruction": "洗浄指示",
+        }
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid(): return None
+        row_data = self._data[index.row()]
+        col_name = self._headers[index.column()]
+
+        if role == Qt.DisplayRole or role == Qt.EditRole:
+            return row_data.get(col_name, "")
+        
+        if role == Qt.BackgroundRole:
+            # 優先度1: 機番の背景色（洗浄指示）
+            if col_name == 'machine_no':
+                instruction = str(row_data.get("cleaning_instruction", ""))
+                color_map = self._config.get("colors", {})
+                color_key = f"instruction_{instruction}"
+                if color_key in color_map:
+                    color = QColor(color_map[color_key])
+                    color.setAlpha(150) # 透明度を少し調整
+                    return color
+
+            # 優先度2: 材質識別の背景色
+            if col_name == 'material_id' and str(row_data.get('material_id')) == '5':
+                color_hex = self._config.get("colors", {}).get("material_id_background_yellow", "#FFFBEA")
+                return QColor(color_hex)
+
+            # 優先度3: セット項目の背景色
+            if self._is_set_logically(row_data) and col_name != 'cleaning_instruction':
+                color_hex = self._config.get("colors", {}).get("set_background_green", "#D4EDDA")
+                return QColor(color_hex)
+
+        return None
+
+    def setData(self, index, value, role=Qt.EditRole):
+        if not index.isValid() or role != Qt.EditRole: return False
+        row = index.row()
+        col_name = self._headers[index.column()]
+        record_id = self._data[row].get("id")
+        if record_id is None: return False
+
+        if col_name == "cleaning_instruction":
+            self._data[row][col_name] = value
+            self.db_update_signal.emit(record_id, col_name, value)
+            self.dataChanged.emit(index, index, [role])
+            self.data_changed_for_unprocessed_list.emit()
+            return True
+        return False
+
+    def flags(self, index):
+        base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
+        if not index.isValid(): return base_flags
+        col_name = self._headers[index.column()]
+        if col_name == "cleaning_instruction":
+            return base_flags | Qt.ItemIsEditable
+        return base_flags

@@ -3,12 +3,14 @@
     "path": "//192.168.1.200/共有/製造課/ロボパット/python app/cleaning_instructions.db"
   },
   "colors": {
-    "instruction_1": "#FF0000",
-    "instruction_2": "#FFC0CB",
-    "instruction_3": "#0000FF",
-    "instruction_4": "#FFFF00",
+    "instruction_1": "#D32F2F",
+    "instruction_2": "#C2185B",
+    "instruction_3": "#1976D2",
+    "instruction_4": "#FBC02D",
     "set_fg_today": "#0000FF",
-    "set_fg_other_day": "#FFFF00"
+    "set_fg_other_day": "#FFFF00",
+    "set_background_green": "#81C784",
+    "material_id_background_yellow": "#FFD54F"
   },
   "remarks_options": [
     "出荷無し",
