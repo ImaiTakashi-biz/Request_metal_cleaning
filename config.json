@@ -10,7 +10,9 @@
     "set_fg_today": "#0000FF",
     "set_fg_other_day": "#FFFF00",
     "set_background_green": "#81C784",
-    "material_id_background_yellow": "#FFD54F"
+    "material_id_background_yellow": "#FFD54F",
+    "unprocessed_manufacturing_bg_color": "#E0F7FA",
+    "unprocessed_cleaning_bg_color": "#FFF3E0"
   },
   "remarks_options": [
     "出荷無し",

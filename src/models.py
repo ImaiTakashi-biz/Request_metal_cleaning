@@ -2,6 +2,7 @@ from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QStyledItemDelegate, QComboBox
 import datetime
+import collections
 
 class ComboBoxDelegate(QStyledItemDelegate):
     """QComboBoxをテーブルセル内に表示するためのデリゲート"""
@@ -287,3 +288,74 @@ class CleaningInstructionTableModel(BaseTableModel):
         if col_name == "cleaning_instruction":
             return base_flags | Qt.ItemIsEditable
         return base_flags
+
+class UnprocessedMachineNumbersTableModel(QAbstractTableModel):
+    """未払い出し機番を表示するためのモデル"""
+    def __init__(self, check_column, config=None, parent=None):
+        super().__init__(parent)
+        self._all_data = []
+        self._filtered_data = collections.defaultdict(list)
+        self._config = config or {}
+        self._check_column = check_column # 'manufacturing_check' or 'cleaning_check'
+        self._headers = [chr(ord('A') + i) + ' line' for i in range(6)] # A line, B line, ... F line
+
+    def load_data(self, new_data):
+        self.beginResetModel()
+        self._all_data = new_data
+        self._filtered_data = collections.defaultdict(list)
+        
+        for item in self._all_data:
+            # フィルタリングロジック: 指定されたチェックカラムがFalse、かつ洗浄指示が"0"または"空欄"以外であるものを抽出
+            if not item.get(self._check_column, False) and str(item.get('cleaning_instruction', '0')) not in ['0', '']:
+                machine_no = item.get('machine_no')
+                if machine_no and len(machine_no) > 0:
+                    line_char = machine_no[0]
+                    self._filtered_data[line_char].append(machine_no)
+        
+        # 各ラインの機番をソート
+        for line_char in self._filtered_data:
+            self._filtered_data[line_char].sort()
+
+        self.endResetModel()
+
+    def rowCount(self, parent=QModelIndex()):
+        if parent.isValid():
+            return 0
+        # 各ラインの最大行数を取得
+        return max((len(v) for v in self._filtered_data.values()), default=0)
+
+    def columnCount(self, parent=QModelIndex()):
+        if parent.isValid():
+            return 0
+        return len(self._headers)
+
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        
+        line_char = chr(ord('A') + index.column())
+        
+        if role == Qt.DisplayRole:
+            if index.row() < len(self._filtered_data[line_char]):
+                return self._filtered_data[line_char][index.row()]
+            return None
+        
+        if role == Qt.TextAlignmentRole:
+            return Qt.AlignCenter
+        
+        if role == Qt.BackgroundRole:
+            colors = self._config.get("colors", {})
+            if self._check_column == 'manufacturing_check':
+                color_hex = colors.get("unprocessed_manufacturing_bg_color", "#E0F7FA") # Light Cyan
+            elif self._check_column == 'cleaning_check':
+                color_hex = colors.get("unprocessed_cleaning_bg_color", "#FFF3E0") # Light Orange
+            else:
+                return None
+            return QColor(color_hex)
+            
+        return None
+
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self._headers[section]
+        return None

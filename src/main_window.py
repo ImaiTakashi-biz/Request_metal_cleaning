@@ -10,7 +10,7 @@ from PySide6.QtCore import QDate, Slot, Qt, QModelIndex
 
 from config import load_config
 from database import DatabaseHandler
-from models import MainTableModel, CleaningInstructionTableModel, ComboBoxDelegate, EditableComboBoxDelegate
+from models import MainTableModel, CleaningInstructionTableModel, ComboBoxDelegate, EditableComboBoxDelegate, UnprocessedMachineNumbersTableModel
 
 FINAL_STYLESHEET = """
 /* Modern & Sophisticated UI Stylesheet */
@@ -191,9 +191,16 @@ class MainWindow(QMainWindow):
 
         self.cleaning_model = CleaningInstructionTableModel(config=self.config, line_filter=None)
         self.cleaning_table_view.setModel(self.cleaning_model)
+
+        # 未払い出し機番モデルの初期化
+        self.manufacturing_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='manufacturing_check', config=self.config)
+        self.manufacturing_unprocessed_table_view.setModel(self.manufacturing_unprocessed_model)
+
+        self.cleaning_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='cleaning_check', config=self.config)
+        self.cleaning_unprocessed_table_view.setModel(self.cleaning_unprocessed_model)
         
         self.all_models = list(self.main_models.values()) + [self.cleaning_model]
-        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view]
+        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
 
         self.setup_delegates()
         self.setup_table_columns()
@@ -270,17 +277,44 @@ class MainWindow(QMainWindow):
 
         # --- 未払い出し機番テーブル ---
         unprocessed_widget = QWidget()
-        unprocessed_layout = QVBoxLayout(unprocessed_widget)
-        unprocessed_title = QLabel("製造未払い出し機番")
-        unprocessed_title.setObjectName("unprocessedTitle")
-        self.unprocessed_table = QTableWidget()
-        self.unprocessed_table.setColumnCount(6)
-        self.unprocessed_table.setHorizontalHeaderLabels(["A line", "B line", "C line", "D line", "E line", "F line"])
-        self.unprocessed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.unprocessed_table.verticalHeader().setVisible(False)
-        self.unprocessed_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        unprocessed_layout.addWidget(unprocessed_title)
-        unprocessed_layout.addWidget(self.unprocessed_table)
+        unprocessed_layout = QHBoxLayout(unprocessed_widget) # Changed to QHBoxLayout
+
+        # 製造未払い出し機番テーブル (左側)
+        manufacturing_unprocessed_container = QWidget()
+        manufacturing_unprocessed_layout = QVBoxLayout(manufacturing_unprocessed_container)
+        manufacturing_unprocessed_title = QLabel("製造未払い出し機番")
+        manufacturing_unprocessed_title.setObjectName("unprocessedTitle")
+        # タイトルに背景色を適用
+        unprocessed_colors = self.config.get("colors", {})
+        manufacturing_title_color = unprocessed_colors.get("unprocessed_manufacturing_bg_color", "#E0F7FA")
+        manufacturing_unprocessed_title.setStyleSheet(f"background-color: {manufacturing_title_color}; padding: 5px; border-radius: 5px;")
+        self.manufacturing_unprocessed_table_view = QTableView()
+        self.manufacturing_unprocessed_table_view.setObjectName("manufacturingUnprocessedTable")
+        self.manufacturing_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.manufacturing_unprocessed_table_view.verticalHeader().setVisible(False)
+        self.manufacturing_unprocessed_table_view.setEditTriggers(QTableView.NoEditTriggers)
+        self.manufacturing_unprocessed_table_view.horizontalHeader().setMinimumSectionSize(80) # Set minimum column width
+        manufacturing_unprocessed_layout.addWidget(manufacturing_unprocessed_title)
+        manufacturing_unprocessed_layout.addWidget(self.manufacturing_unprocessed_table_view)
+        unprocessed_layout.addWidget(manufacturing_unprocessed_container)
+
+        # 洗浄未払い出し機番テーブル (右側)
+        cleaning_unprocessed_container = QWidget()
+        cleaning_unprocessed_layout = QVBoxLayout(cleaning_unprocessed_container)
+        cleaning_unprocessed_title = QLabel("洗浄未払い出し機番")
+        cleaning_unprocessed_title.setObjectName("unprocessedTitle")
+        # タイトルに背景色を適用
+        cleaning_title_color = unprocessed_colors.get("unprocessed_cleaning_bg_color", "#FFF3E0")
+        cleaning_unprocessed_title.setStyleSheet(f"background-color: {cleaning_title_color}; padding: 5px; border-radius: 5px;")
+        self.cleaning_unprocessed_table_view = QTableView()
+        self.cleaning_unprocessed_table_view.setObjectName("cleaningUnprocessedTable")
+        self.cleaning_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.cleaning_unprocessed_table_view.verticalHeader().setVisible(False)
+        self.cleaning_unprocessed_table_view.setEditTriggers(QTableView.NoEditTriggers)
+        self.cleaning_unprocessed_table_view.horizontalHeader().setMinimumSectionSize(80) # Set minimum column width
+        cleaning_unprocessed_layout.addWidget(cleaning_unprocessed_title)
+        cleaning_unprocessed_layout.addWidget(self.cleaning_unprocessed_table_view)
+        unprocessed_layout.addWidget(cleaning_unprocessed_container)
 
         # --- 全体レイアウト ---
         main_layout.addWidget(title_label)
@@ -360,8 +394,10 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def refresh_unprocessed_list_from_model(self):
-        if self.main_models['left']:
-            self.update_unprocessed_table(self.main_models['left'].get_all_data())
+        if self.manufacturing_unprocessed_model and self.cleaning_unprocessed_model:
+            all_data = self.main_models['left'].get_all_data() # Get all data from one of the main models
+            self.manufacturing_unprocessed_model.load_data(all_data)
+            self.cleaning_unprocessed_model.load_data(all_data)
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -386,39 +422,9 @@ class MainWindow(QMainWindow):
         else:
             for model in self.all_models:
                 model.load_data(data)
+            self.manufacturing_unprocessed_model.load_data(data)
+            self.cleaning_unprocessed_model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
-            self.update_unprocessed_table(data)
-
-    def update_unprocessed_table(self, data):
-        self.unprocessed_table.clearContents()
-        self.unprocessed_table.setRowCount(0)
-
-        unprocessed = [d for d in data if str(d.get('cleaning_instruction', '0')) not in ['0', ''] and not d.get('manufacturing_check')]
-        
-        if not unprocessed:
-            return
-
-        grouped = collections.defaultdict(list)
-        for item in unprocessed:
-            machine_no = item.get('machine_no')
-            if machine_no:
-                grouped[machine_no[0]].append(machine_no)
-
-        col_map = {chr(ord('A') + i): i for i in range(6)} # {'A':0, 'B':1, ...}
-        max_rows = 0
-
-        for line, machine_nos in grouped.items():
-            col = col_map.get(line)
-            if col is None: continue
-
-            machine_nos.sort()
-            if len(machine_nos) > max_rows:
-                max_rows = len(machine_nos)
-                self.unprocessed_table.setRowCount(max_rows)
-
-            for row, machine_no in enumerate(machine_nos):
-                item = QTableWidgetItem(machine_no)
-                self.unprocessed_table.setItem(row, col, item)
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):
