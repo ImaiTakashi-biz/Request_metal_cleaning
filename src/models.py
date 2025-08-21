@@ -32,6 +32,10 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
         editor = QComboBox(parent)
         editor.addItems(self.items)
         editor.setEditable(True)
+        # 選択が変更されたときにsetModelDataを呼び出す
+        editor.currentIndexChanged.connect(lambda: self.setModelData(editor, index.model(), index))
+        # テキストが変更されたときにもsetModelDataを呼び出す (編集可能な場合)
+        editor.editTextChanged.connect(lambda: self.setModelData(editor, index.model(), index))
         return editor
 
     def setEditorData(self, editor, index):
@@ -39,7 +43,9 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
         editor.setCurrentText(str(value))
 
     def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentText(), Qt.EditRole)
+        text_value = editor.currentText()
+        model.setData(index, text_value, Qt.EditRole)
+        self.commitData.emit(editor)
 
 class BaseTableModel(QAbstractTableModel):
     """モデルの共通ロジックを持つベースクラス"""
@@ -189,7 +195,6 @@ class MainTableModel(BaseTableModel):
         
         if role == Qt.EditRole and col_name == "remarks":
             self._data[row][col_name] = value
-            self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
             return True
 

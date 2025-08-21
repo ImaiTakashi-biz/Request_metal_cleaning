@@ -2,11 +2,11 @@ import sys
 import collections
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
-    QTableView, QCalendarWidget, QPushButton,
+    QTableView, QDateEdit, QPushButton,
     QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView,
-    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup
+    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy
 )
-from PySide6.QtCore import QDate, Slot, Qt, QEvent, QModelIndex
+from PySide6.QtCore import QDate, Slot, Qt, QModelIndex
 
 from config import load_config
 from database import DatabaseHandler
@@ -70,7 +70,7 @@ QPushButton.page-button:checked {
 
 
 /* Consistent styling for input widgets */
-QComboBox, QLineEdit {
+QComboBox, QLineEdit, QDateEdit {
     background-color: #FFFFFF;
     border: 1px solid #CED4DA; /* Lighter border */
     border-radius: 8px; /* More rounded */
@@ -79,13 +79,13 @@ QComboBox, QLineEdit {
     font-size: 14px;
     min-height: 32px;
 }
-QComboBox::drop-down {
+QComboBox::drop-down, QDateEdit::drop-down {
     border: none;
     width: 20px;
     subcontrol-origin: padding;
     subcontrol-position: top right;
 }
-QComboBox QAbstractItemView {
+QComboBox QAbstractItemView, QDateEdit QAbstractItemView {
     background-color: #FFFFFF;
     border: 1px solid #CED4DA;
     selection-background-color: #E9ECEF; /* Subtle selection */
@@ -153,56 +153,6 @@ QHeaderView::section:last {
     border-right: none;
 }
 
-/* Calendar */
-QCalendarWidget {
-    background-color: #FFFFFF;
-    border-radius: 8px; /* More rounded */
-    border: 1px solid #E9ECEF; /* Subtle border */
-    padding: 10px;
-}
-QCalendarWidget QToolButton {
-    color: #3457D5; /* Corporate blue for navigation buttons */
-    background-color: transparent;
-    font-size: 18px; /* Larger navigation arrows */
-    font-weight: 600;
-    border-radius: 5px;
-}
-QCalendarWidget QToolButton:hover {
-    background-color: #E9ECEF;
-}
-QCalendarWidget QWidget#qt_calendar_navigationbar {
-    background-color: #F8F9FA; /* Lighter navigation bar */
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    padding: 5px;
-}
-QCalendarWidget QTableView {
-    selection-background-color: #3457D5; /* Corporate blue for selected date */
-    selection-color: white;
-    border: none;
-    gridline-color: #F1F3F5;
-    font-size: 14px;
-}
-QCalendarWidget QTableView QHeaderView::section {
-    background-color: #FFFFFF;
-    border: none;
-    padding: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #6C757D; /* Softer day names */
-}
-QCalendarWidget QTableView::item:hover {
-    background-color: #E9ECEF; /* Subtle hover effect */
-}
-QCalendarWidget QTableView::item:selected {
-    background-color: #3457D5;
-    color: white;
-    border-radius: 4px; /* Slightly rounded selected date */
-}
-QCalendarWidget QTableView::item:disabled {
-    color: #ADB5BD; /* Disabled dates */
-}
-
 /* Status Bar */
 QStatusBar {
     font-size: 13px;
@@ -217,7 +167,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("洗浄依頼管理アプリ")
-        self.setGeometry(100, 100, 1600, 900) # Window size adjusted
+        self.setGeometry(100, 100, 1800, 960)
         self.showMaximized()
 
         self.config = load_config()
@@ -231,21 +181,19 @@ class MainWindow(QMainWindow):
 
         # --- モデルの初期化 ---
         self.main_models = {
-            'left': MainTableModel(config=self.config, line_filter=['A', 'B', 'C', 'D']),
+            'left': MainTableModel(config=self.config, line_filter=['A', 'B']),
+            'center': MainTableModel(config=self.config, line_filter=['C', 'D']),
             'right': MainTableModel(config=self.config, line_filter=['E', 'F'])
         }
         self.main_table_view_left.setModel(self.main_models['left'])
+        self.main_table_view_center.setModel(self.main_models['center'])
         self.main_table_view_right.setModel(self.main_models['right'])
 
-        self.cleaning_models = {
-            'left': CleaningInstructionTableModel(config=self.config, line_filter=['A', 'B', 'C', 'D']),
-            'right': CleaningInstructionTableModel(config=self.config, line_filter=['E', 'F'])
-        }
-        self.cleaning_table_view_left.setModel(self.cleaning_models['left'])
-        self.cleaning_table_view_right.setModel(self.cleaning_models['right'])
+        self.cleaning_model = CleaningInstructionTableModel(config=self.config, line_filter=None)
+        self.cleaning_table_view.setModel(self.cleaning_model)
         
-        self.all_models = list(self.main_models.values()) + list(self.cleaning_models.values())
-        self.all_table_views = [self.main_table_view_left, self.main_table_view_right, self.cleaning_table_view_left, self.cleaning_table_view_right]
+        self.all_models = list(self.main_models.values()) + [self.cleaning_model]
+        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view]
 
         self.setup_delegates()
         self.setup_table_columns()
@@ -254,7 +202,7 @@ class MainWindow(QMainWindow):
 
         # --- シグナルとスロットの接続 ---
         self.page_button_group.idClicked.connect(self.pages_stack.setCurrentIndex)
-        self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
+        self.date_edit.dateChanged.connect(self.load_data_for_selected_date)
         
         for model in self.all_models:
             model.db_update_signal.connect(self.update_database_record)
@@ -262,42 +210,25 @@ class MainWindow(QMainWindow):
 
         for view in self.all_table_views:
             view.clicked.connect(self.handle_table_click)
-        
-        self.calendar.installEventFilter(self)
 
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(20)
+        main_layout.setSpacing(15)
 
         title_label = QLabel("洗浄依頼管理")
         title_label.setObjectName("mainTitle")
 
-        # --- 上部固定パネル ---
-        top_panel = QHBoxLayout()
-        top_panel.setSpacing(20)
-
-        self.calendar = QCalendarWidget()
-        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
-        self.calendar.setSelectedDate(QDate.currentDate())
-        self.calendar.setFixedWidth(400)
-        top_panel.addWidget(self.calendar)
-
-        unprocessed_widget = QWidget()
-        unprocessed_layout = QVBoxLayout(unprocessed_widget)
-        unprocessed_title = QLabel("製造未払い出し機番")
-        unprocessed_title.setObjectName("unprocessedTitle")
-        self.unprocessed_table = QTableWidget()
-        self.unprocessed_table.setColumnCount(6)
-        self.unprocessed_table.setHorizontalHeaderLabels(["A line", "B line", "C line", "D line", "E line", "F line"])
-        self.unprocessed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.unprocessed_table.verticalHeader().setVisible(False)
-        self.unprocessed_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        unprocessed_layout.addWidget(unprocessed_title)
-        unprocessed_layout.addWidget(self.unprocessed_table)
-        top_panel.addWidget(unprocessed_widget)
+        # --- 上部コントロール ---
+        top_controls_layout = QHBoxLayout()
+        date_label = QLabel("日付選択:")
+        self.date_edit = QDateEdit(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
+        top_controls_layout.addWidget(date_label)
+        top_controls_layout.addWidget(self.date_edit)
+        top_controls_layout.addStretch()
 
         # --- ページ切り替えボタン ---
         page_button_layout = QHBoxLayout()
@@ -320,30 +251,43 @@ class MainWindow(QMainWindow):
 
         # --- ページスタック ---
         self.pages_stack = QStackedWidget()
-        
-        # Mainページ
+        self.pages_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Mainページ (3分割)
         main_page_widget = QWidget()
         main_page_layout = QHBoxLayout(main_page_widget)
         self.main_table_view_left = QTableView()
+        self.main_table_view_center = QTableView()
         self.main_table_view_right = QTableView()
         main_page_layout.addWidget(self.main_table_view_left)
+        main_page_layout.addWidget(self.main_table_view_center)
         main_page_layout.addWidget(self.main_table_view_right)
         self.pages_stack.addWidget(main_page_widget)
 
-        # 洗浄指示管理ページ
-        cleaning_page_widget = QWidget()
-        cleaning_page_layout = QHBoxLayout(cleaning_page_widget)
-        self.cleaning_table_view_left = QTableView()
-        self.cleaning_table_view_right = QTableView()
-        cleaning_page_layout.addWidget(self.cleaning_table_view_left)
-        cleaning_page_layout.addWidget(self.cleaning_table_view_right)
-        self.pages_stack.addWidget(cleaning_page_widget)
+        # 洗浄指示管理ページ (1つ)
+        self.cleaning_table_view = QTableView()
+        self.pages_stack.addWidget(self.cleaning_table_view)
+
+        # --- 未払い出し機番テーブル ---
+        unprocessed_widget = QWidget()
+        unprocessed_layout = QVBoxLayout(unprocessed_widget)
+        unprocessed_title = QLabel("製造未払い出し機番")
+        unprocessed_title.setObjectName("unprocessedTitle")
+        self.unprocessed_table = QTableWidget()
+        self.unprocessed_table.setColumnCount(6)
+        self.unprocessed_table.setHorizontalHeaderLabels(["A line", "B line", "C line", "D line", "E line", "F line"])
+        self.unprocessed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.unprocessed_table.verticalHeader().setVisible(False)
+        self.unprocessed_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        unprocessed_layout.addWidget(unprocessed_title)
+        unprocessed_layout.addWidget(self.unprocessed_table)
 
         # --- 全体レイアウト ---
         main_layout.addWidget(title_label)
-        main_layout.addLayout(top_panel)
+        main_layout.addLayout(top_controls_layout)
         main_layout.addLayout(page_button_layout)
         main_layout.addWidget(self.pages_stack)
+        main_layout.addWidget(unprocessed_widget)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -351,6 +295,7 @@ class MainWindow(QMainWindow):
         self.status_bar.addWidget(self.status_label)
 
     def setup_table_columns(self):
+        # 全ビューのデフォルトをResizeToContentsに設定
         for view in self.all_table_views:
             header = view.horizontalHeader()
             model = view.model()
@@ -358,23 +303,47 @@ class MainWindow(QMainWindow):
             for i in range(model.columnCount()):
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
+        # Mainページのテーブルの指定された列を固定幅に設定
+        main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
+        
+        # 固定幅にするカラムとその幅
+        fixed_width_columns = {
+            "part_number": 95,
+            "product_name": 95,
+            "customer_name": 95,
+            "remarks": 90,
+        }
+
+        for col_name, width in fixed_width_columns.items():
+            try:
+                # モデルのヘッダー定義は共通なので、どれか一つからインデックスを取得
+                col_index = self.main_models['left']._headers.index(col_name)
+                for view in main_views:
+                    header = view.horizontalHeader()
+                    # 固定サイズモードに設定
+                    header.setSectionResizeMode(col_index, QHeaderView.Fixed)
+                    # 幅を設定
+                    view.setColumnWidth(col_index, width)
+            except ValueError:
+                pass # カラムが見つからない場合は何もしない
+
     def setup_delegates(self):
         # Mainテーブルのデリゲート
         try:
             col_index = self.main_models['left']._headers.index("remarks")
             items = self.config.get("remarks_options", ["出荷無し", "1st外観"])
-            delegate = EditableComboBoxDelegate(items=items, parent=self.main_table_view_left)
+            delegate = EditableComboBoxDelegate(items=items, parent=self)
             self.main_table_view_left.setItemDelegateForColumn(col_index, delegate)
+            self.main_table_view_center.setItemDelegateForColumn(col_index, delegate)
             self.main_table_view_right.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
         # 洗浄指示管理テーブルのデリゲート
         try:
-            col_index = self.cleaning_models['left']._headers.index("cleaning_instruction")
+            col_index = self.cleaning_model._headers.index("cleaning_instruction")
             items = ["", "1", "2", "3", "4"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view_left)
-            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
-            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
+            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view)
+            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
     @Slot(QModelIndex)
@@ -389,14 +358,8 @@ class MainWindow(QMainWindow):
         elif isinstance(model, CleaningInstructionTableModel) and col_name == "cleaning_instruction":
             sender_view.edit(index)
 
-    def eventFilter(self, obj, event):
-        if obj == self.calendar and event.type() == QEvent.Type.Wheel:
-            return True
-        return super().eventFilter(obj, event)
-
     @Slot()
     def refresh_unprocessed_list_from_model(self):
-        # いずれかのモデルから全データを取得して更新
         if self.main_models['left']:
             self.update_unprocessed_table(self.main_models['left'].get_all_data())
 
@@ -410,7 +373,7 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def load_data_for_selected_date(self):
-        selected_date = self.calendar.selectedDate().toString("yyyy-MM-dd")
+        selected_date = self.date_edit.date().toString("yyyy-MM-dd")
         self.status_label.setText(f"{selected_date} のデータを読み込み中...")
 
         data, error = self.db_handler.get_data_by_date(selected_date)
@@ -462,7 +425,6 @@ class MainWindow(QMainWindow):
         success = self.db_handler.update_record(record_id, column, value)
         if success:
             self.status_label.setText(f"レコード {record_id} の {column} を更新しました。")
-            # DB更新成功後、全モデルのデータを再ロードして同期する
             self.load_data_for_selected_date()
         else:
             self.status_label.setText(f"レコード {record_id} の更新に失敗しました。")
