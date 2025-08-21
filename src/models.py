@@ -64,8 +64,8 @@ class CleaningTableModel(QAbstractTableModel):
         
         self._display_headers = {
             "machine_no": "機番",
-            "manufacturing_check": "製造check",
-            "cleaning_check": "洗浄check",
+            "manufacturing_check": "製造",
+            "cleaning_check": "洗浄",
             "前日セット": "セット",
             "part_number": "品番",
             "product_name": "品名",

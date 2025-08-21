@@ -38,7 +38,7 @@ class MainWindow(QMainWindow):
         self.connect_to_db_and_load_data()
 
         # --- シグナルとスロットの接続 ---
-        self.refresh_button.clicked.connect(self.load_data_for_selected_date)
+        
         self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
         self.table_model.db_update_signal.connect(self.update_database_record)
 
@@ -53,13 +53,14 @@ class MainWindow(QMainWindow):
         top_layout = QHBoxLayout(top_panel)
         
         self.calendar = QCalendarWidget()
+        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader) # 週番号を非表示
         self.calendar.setSelectedDate(QDate.currentDate())
         
-        self.refresh_button = QPushButton("データ更新")
+        
 
         top_layout.addWidget(self.calendar)
         top_layout.addStretch()
-        top_layout.addWidget(self.refresh_button)
+        
 
         # --- データテーブル ---
         self.table_view = QTableView()
