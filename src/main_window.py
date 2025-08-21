@@ -1,8 +1,10 @@
 import sys
+import collections
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
     QTableView, QCalendarWidget, QPushButton,
-    QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView
+    QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView,
+    QTableWidget, QTableWidgetItem
 )
 from PySide6.QtCore import QDate, Slot, Qt, QEvent, QModelIndex
 
@@ -27,6 +29,13 @@ QMainWindow, QWidget {
     padding: 15px 10px;
     margin-bottom: 10px;
     border-bottom: 1px solid #E9ECEF; /* Subtle separator */
+}
+
+#unprocessedTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: #343A40;
+    margin-bottom: 10px;
 }
 
 QPushButton {
@@ -95,7 +104,7 @@ QCheckBox::indicator:checked {
 }
 
 /* Table */
-QTableView {
+QTableView, QTableWidget {
     background-color: #FFFFFF;
     border: 1px solid #E9ECEF; /* Subtle border for the whole table */
     border-radius: 8px; /* Rounded corners for the table */
@@ -106,12 +115,12 @@ QTableView {
     selection-color: #343A40;
     outline: 0; /* Remove focus outline */
 }
-QTableView::item {
+QTableView::item, QTableWidget::item {
     padding: 10px 12px; /* More padding for items */
     border-bottom: 1px solid #E9ECEF; /* Lighter separator */
     color: #343A40;
 }
-QTableView::item:selected {
+QTableView::item:selected, QTableWidget::item:selected {
     background-color: #E9ECEF;
     color: #343A40;
 }
@@ -218,35 +227,51 @@ class MainWindow(QMainWindow):
         # --- シグナルとスロットの接続 ---
         self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
         self.table_model.db_update_signal.connect(self.update_database_record)
-        self.table_view.clicked.connect(self.handle_table_click) # Connect clicked signal
-        self.calendar.installEventFilter(self) # Install event filter for calendar
+        self.table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
+        self.table_view.clicked.connect(self.handle_table_click)
+        self.calendar.installEventFilter(self)
 
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20) # Increased margins
-        main_layout.setSpacing(20) # Increased spacing
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
 
         title_label = QLabel("洗浄依頼管理")
         title_label.setObjectName("mainTitle")
 
         top_panel = QHBoxLayout()
-        top_panel.setSpacing(20) # Increased spacing
+        top_panel.setSpacing(20)
 
         self.calendar = QCalendarWidget()
-        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader) # 週番号を非表示
+        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
         self.calendar.setSelectedDate(QDate.currentDate())
         self.calendar.setFixedWidth(400)
-
         top_panel.addWidget(self.calendar)
+
+        # 製造払い出し未機番リスト表示エリア
+        unprocessed_widget = QWidget()
+        unprocessed_layout = QVBoxLayout(unprocessed_widget)
+        unprocessed_title = QLabel("製造未払い出し機番")
+        unprocessed_title.setObjectName("unprocessedTitle")
+        self.unprocessed_table = QTableWidget()
+        self.unprocessed_table.setColumnCount(6)
+        self.unprocessed_table.setHorizontalHeaderLabels(["A line", "B line", "C line", "D line", "E line", "F line"])
+        self.unprocessed_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.unprocessed_table.verticalHeader().setVisible(False)
+        self.unprocessed_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        unprocessed_layout.addWidget(unprocessed_title)
+        unprocessed_layout.addWidget(self.unprocessed_table)
+        top_panel.addWidget(unprocessed_widget)
+
         top_panel.addStretch()
 
         self.table_view = QTableView()
         self.table_view.setSortingEnabled(True)
         self.table_view.setShowGrid(False)
         self.table_view.setAlternatingRowColors(True)
-        self.table_view.setEditTriggers(QTableView.NoEditTriggers) # Disable default editing triggers
+        self.table_view.setEditTriggers(QTableView.NoEditTriggers)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -265,7 +290,7 @@ class MainWindow(QMainWindow):
             col_name = self.table_model._headers[i]
             if col_name in ["remarks", "cleaning_instruction"]:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
-                self.table_view.setColumnWidth(i, 150) # Increased width for these columns
+                self.table_view.setColumnWidth(i, 150)
             elif col_name == "product_name":
                 product_name_index = i
             else:
@@ -291,17 +316,22 @@ class MainWindow(QMainWindow):
         except ValueError:
             print("Warning: 'remarks' column not found.")
 
-    @Slot(QModelIndex) # New slot for single-click editing
+    @Slot(QModelIndex)
     def handle_table_click(self, index):
         if index.isValid():
             col_name = self.table_model._headers[index.column()]
             if col_name in ["cleaning_instruction", "remarks"]:
                 self.table_view.edit(index)
 
-    def eventFilter(self, obj, event): # Event filter for calendar
+    def eventFilter(self, obj, event):
         if obj == self.calendar and event.type() == QEvent.Type.Wheel:
-            return True # Consume the event
+            return True
         return super().eventFilter(obj, event)
+
+    @Slot()
+    def refresh_unprocessed_list_from_model(self):
+        if self.table_model:
+            self.update_unprocessed_table(self.table_model._data)
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -325,6 +355,38 @@ class MainWindow(QMainWindow):
         else:
             self.table_model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
+            self.update_unprocessed_table(data)
+
+    def update_unprocessed_table(self, data):
+        self.unprocessed_table.clearContents()
+        self.unprocessed_table.setRowCount(0)
+
+        unprocessed = [d for d in data if str(d.get('cleaning_instruction', '0')) not in ['0', ''] and not d.get('manufacturing_check')]
+        
+        if not unprocessed:
+            return
+
+        grouped = collections.defaultdict(list)
+        for item in unprocessed:
+            machine_no = item.get('machine_no')
+            if machine_no:
+                grouped[machine_no[0]].append(machine_no)
+
+        col_map = {chr(ord('A') + i): i for i in range(6)} # {'A':0, 'B':1, ...}
+        max_rows = 0
+
+        for line, machine_nos in grouped.items():
+            col = col_map.get(line)
+            if col is None: continue
+
+            machine_nos.sort()
+            if len(machine_nos) > max_rows:
+                max_rows = len(machine_nos)
+                self.unprocessed_table.setRowCount(max_rows)
+
+            for row, machine_no in enumerate(machine_nos):
+                item = QTableWidgetItem(machine_no)
+                self.unprocessed_table.setItem(row, col, item)
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):

@@ -43,6 +43,7 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
 
 class CleaningTableModel(QAbstractTableModel):
     db_update_signal = Signal(int, str, object)
+    data_changed_for_unprocessed_list = Signal()
 
     def __init__(self, data=None, config=None, parent=None):
         super().__init__(parent)
@@ -138,12 +139,14 @@ class CleaningTableModel(QAbstractTableModel):
             self._data[row][col_name] = new_value
             self.db_update_signal.emit(record_id, col_name, new_value)
             self.dataChanged.emit(index, index, [role])
+            self.data_changed_for_unprocessed_list.emit() # リアルタイム更新のためにシグナルを発行
             return True
         
         if role == Qt.EditRole and col_name in ["remarks", "cleaning_instruction"]:
             self._data[row][col_name] = value
             self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
+            self.data_changed_for_unprocessed_list.emit() # リアルタイム更新のためにシグナルを発行
             return True
 
         return False
