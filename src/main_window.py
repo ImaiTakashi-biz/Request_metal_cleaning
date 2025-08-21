@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("洗浄依頼管理アプリ")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1600, 900) # Window size adjusted
         self.showMaximized()
 
         self.config = load_config()
@@ -230,11 +230,22 @@ class MainWindow(QMainWindow):
         self.setup_ui()
 
         # --- モデルの初期化 ---
-        self.main_table_model = MainTableModel(config=self.config)
-        self.main_table_view.setModel(self.main_table_model)
+        self.main_models = {
+            'left': MainTableModel(config=self.config, line_filter=['A', 'B', 'C', 'D']),
+            'right': MainTableModel(config=self.config, line_filter=['E', 'F'])
+        }
+        self.main_table_view_left.setModel(self.main_models['left'])
+        self.main_table_view_right.setModel(self.main_models['right'])
 
-        self.cleaning_table_model = CleaningInstructionTableModel(config=self.config)
-        self.cleaning_table_view.setModel(self.cleaning_table_model)
+        self.cleaning_models = {
+            'left': CleaningInstructionTableModel(config=self.config, line_filter=['A', 'B', 'C', 'D']),
+            'right': CleaningInstructionTableModel(config=self.config, line_filter=['E', 'F'])
+        }
+        self.cleaning_table_view_left.setModel(self.cleaning_models['left'])
+        self.cleaning_table_view_right.setModel(self.cleaning_models['right'])
+        
+        self.all_models = list(self.main_models.values()) + list(self.cleaning_models.values())
+        self.all_table_views = [self.main_table_view_left, self.main_table_view_right, self.cleaning_table_view_left, self.cleaning_table_view_right]
 
         self.setup_delegates()
         self.setup_table_columns()
@@ -243,17 +254,15 @@ class MainWindow(QMainWindow):
 
         # --- シグナルとスロットの接続 ---
         self.page_button_group.idClicked.connect(self.pages_stack.setCurrentIndex)
-
         self.calendar.selectionChanged.connect(self.load_data_for_selected_date)
         
-        self.main_table_model.db_update_signal.connect(self.update_database_record)
-        self.main_table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
-        
-        self.cleaning_table_model.db_update_signal.connect(self.update_database_record)
-        self.cleaning_table_model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
+        for model in self.all_models:
+            model.db_update_signal.connect(self.update_database_record)
+            model.data_changed_for_unprocessed_list.connect(self.refresh_unprocessed_list_from_model)
 
-        self.main_table_view.clicked.connect(self.handle_table_click)
-        self.cleaning_table_view.clicked.connect(self.handle_table_click)
+        for view in self.all_table_views:
+            view.clicked.connect(self.handle_table_click)
+        
         self.calendar.installEventFilter(self)
 
     def setup_ui(self):
@@ -311,10 +320,24 @@ class MainWindow(QMainWindow):
 
         # --- ページスタック ---
         self.pages_stack = QStackedWidget()
-        self.main_table_view = QTableView()
-        self.cleaning_table_view = QTableView()
-        self.pages_stack.addWidget(self.main_table_view)
-        self.pages_stack.addWidget(self.cleaning_table_view)
+        
+        # Mainページ
+        main_page_widget = QWidget()
+        main_page_layout = QHBoxLayout(main_page_widget)
+        self.main_table_view_left = QTableView()
+        self.main_table_view_right = QTableView()
+        main_page_layout.addWidget(self.main_table_view_left)
+        main_page_layout.addWidget(self.main_table_view_right)
+        self.pages_stack.addWidget(main_page_widget)
+
+        # 洗浄指示管理ページ
+        cleaning_page_widget = QWidget()
+        cleaning_page_layout = QHBoxLayout(cleaning_page_widget)
+        self.cleaning_table_view_left = QTableView()
+        self.cleaning_table_view_right = QTableView()
+        cleaning_page_layout.addWidget(self.cleaning_table_view_left)
+        cleaning_page_layout.addWidget(self.cleaning_table_view_right)
+        self.pages_stack.addWidget(cleaning_page_widget)
 
         # --- 全体レイアウト ---
         main_layout.addWidget(title_label)
@@ -328,45 +351,43 @@ class MainWindow(QMainWindow):
         self.status_bar.addWidget(self.status_label)
 
     def setup_table_columns(self):
-        # Mainテーブル
-        header = self.main_table_view.horizontalHeader()
-        for i in range(self.main_table_model.columnCount()):
-            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
-        # Cleaningテーブル
-        header = self.cleaning_table_view.horizontalHeader()
-        for i in range(self.cleaning_table_model.columnCount()):
-            header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        for view in self.all_table_views:
+            header = view.horizontalHeader()
+            model = view.model()
+            if not model: continue
+            for i in range(model.columnCount()):
+                header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
     def setup_delegates(self):
         # Mainテーブルのデリゲート
         try:
-            col_index = self.main_table_model._headers.index("remarks")
+            col_index = self.main_models['left']._headers.index("remarks")
             items = self.config.get("remarks_options", ["出荷無し", "1st外観"])
-            delegate = EditableComboBoxDelegate(items=items, parent=self.main_table_view)
-            self.main_table_view.setItemDelegateForColumn(col_index, delegate)
+            delegate = EditableComboBoxDelegate(items=items, parent=self.main_table_view_left)
+            self.main_table_view_left.setItemDelegateForColumn(col_index, delegate)
+            self.main_table_view_right.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
         # 洗浄指示管理テーブルのデリゲート
         try:
-            col_index = self.cleaning_table_model._headers.index("cleaning_instruction")
+            col_index = self.cleaning_models['left']._headers.index("cleaning_instruction")
             items = ["", "1", "2", "3", "4"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view)
-            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
+            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view_left)
+            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
+            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
     @Slot(QModelIndex)
     def handle_table_click(self, index):
         if not index.isValid(): return
-        # クリックされたテーブルビューを特定
-        sender_table = self.sender()
-        if sender_table == self.main_table_view:
-            col_name = self.main_table_model._headers[index.column()]
-            if col_name == "remarks":
-                sender_table.edit(index)
-        elif sender_table == self.cleaning_table_view:
-            col_name = self.cleaning_table_model._headers[index.column()]
-            if col_name == "cleaning_instruction":
-                sender_table.edit(index)
+        sender_view = self.sender()
+        model = sender_view.model()
+        col_name = model._headers[index.column()]
+
+        if isinstance(model, MainTableModel) and col_name == "remarks":
+            sender_view.edit(index)
+        elif isinstance(model, CleaningInstructionTableModel) and col_name == "cleaning_instruction":
+            sender_view.edit(index)
 
     def eventFilter(self, obj, event):
         if obj == self.calendar and event.type() == QEvent.Type.Wheel:
@@ -375,9 +396,9 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def refresh_unprocessed_list_from_model(self):
-        # どちらのモデルのデータを使っても同じ結果になるはず
-        if self.main_table_model:
-            self.update_unprocessed_table(self.main_table_model._data)
+        # いずれかのモデルから全データを取得して更新
+        if self.main_models['left']:
+            self.update_unprocessed_table(self.main_models['left'].get_all_data())
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -395,13 +416,13 @@ class MainWindow(QMainWindow):
         data, error = self.db_handler.get_data_by_date(selected_date)
 
         if error:
-            self.main_table_model.load_data([])
-            self.cleaning_table_model.load_data([])
+            for model in self.all_models:
+                model.load_data([])
             self.status_label.setText(f"エラー: {error}")
             QMessageBox.warning(self, "データベースエラー", f"データの読み込みに失敗しました。\n\n詳細: {error}")
         else:
-            self.main_table_model.load_data(data)
-            self.cleaning_table_model.load_data(data)
+            for model in self.all_models:
+                model.load_data(data)
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
             self.update_unprocessed_table(data)
 
@@ -441,6 +462,8 @@ class MainWindow(QMainWindow):
         success = self.db_handler.update_record(record_id, column, value)
         if success:
             self.status_label.setText(f"レコード {record_id} の {column} を更新しました。")
+            # DB更新成功後、全モデルのデータを再ロードして同期する
+            self.load_data_for_selected_date()
         else:
             self.status_label.setText(f"レコード {record_id} の更新に失敗しました。")
             self.load_data_for_selected_date()

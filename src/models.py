@@ -46,13 +46,16 @@ class BaseTableModel(QAbstractTableModel):
     db_update_signal = Signal(int, str, object)
     data_changed_for_unprocessed_list = Signal()
 
-    def __init__(self, data=None, config=None, parent=None):
+    def __init__(self, data=None, config=None, parent=None, line_filter=None):
         super().__init__(parent)
-        self._data = data or []
+        self._all_data = data or []
+        self._data = []
         self._config = config or {}
+        self._line_filter = line_filter
         self._headers = []
         self._display_headers = {}
         self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date", "quantity", "material_id"]
+        self.filter_and_load(self._all_data)
 
     def rowCount(self, parent=QModelIndex()):
         return len(self._data)
@@ -68,8 +71,18 @@ class BaseTableModel(QAbstractTableModel):
 
     def load_data(self, new_data):
         self.beginResetModel()
-        self._data = new_data
+        self._all_data = new_data
+        self.filter_and_load(self._all_data)
         self.endResetModel()
+
+    def filter_and_load(self, source_data):
+        if not self._line_filter:
+            self._data = source_data
+        else:
+            self._data = [row for row in source_data if row.get('machine_no') and row.get('machine_no')[0] in self._line_filter]
+
+    def get_all_data(self):
+        return self._all_data
 
     def _is_set_logically(self, row_data):
         set_date_str = row_data.get("set_date")
@@ -105,8 +118,8 @@ class BaseTableModel(QAbstractTableModel):
 
 class MainTableModel(BaseTableModel):
     """Mainページ用のテーブルモデル"""
-    def __init__(self, data=None, config=None, parent=None):
-        super().__init__(data, config, parent)
+    def __init__(self, data=None, config=None, parent=None, line_filter=None):
+        super().__init__(data, config, parent, line_filter)
         self._headers = [
             "machine_no", 
             "manufacturing_check", 
@@ -115,7 +128,6 @@ class MainTableModel(BaseTableModel):
             "part_number", 
             "product_name", 
             "customer_name", 
-            "next_process", 
             "remarks",
         ]
         self._display_headers = {
@@ -126,7 +138,6 @@ class MainTableModel(BaseTableModel):
             "part_number": "品番",
             "product_name": "品名",
             "customer_name": "客先名",
-            "next_process": "次工程",
             "remarks": "備考",
         }
 
@@ -196,11 +207,11 @@ class MainTableModel(BaseTableModel):
 
 class CleaningInstructionTableModel(BaseTableModel):
     """洗浄指示管理ページ用のテーブルモデル"""
-    def __init__(self, data=None, config=None, parent=None):
-        super().__init__(data, config, parent)
+    def __init__(self, data=None, config=None, parent=None, line_filter=None):
+        super().__init__(data, config, parent, line_filter)
         self._headers = [
             "set_date", "machine_no", "customer_name", "part_number", 
-            "product_name", "quantity", "completion_date", "material_id", "cleaning_instruction"
+            "product_name", "next_process", "quantity", "completion_date", "material_id", "cleaning_instruction"
         ]
         self._display_headers = {
             "set_date": "セット予定日",
@@ -208,6 +219,7 @@ class CleaningInstructionTableModel(BaseTableModel):
             "customer_name": "客先名",
             "part_number": "品番",
             "product_name": "製品名",
+            "next_process": "次工程",
             "quantity": "数量",
             "completion_date": "加工終了日",
             "material_id": "材質識別",
@@ -220,7 +232,10 @@ class CleaningInstructionTableModel(BaseTableModel):
         col_name = self._headers[index.column()]
 
         if role == Qt.DisplayRole or role == Qt.EditRole:
-            return row_data.get(col_name, "")
+            value = row_data.get(col_name, "")
+            if col_name in ["set_date", "completion_date"] and value:
+                return str(value).split(' ')[0]
+            return value
         
         if role == Qt.BackgroundRole:
             # 優先度1: 機番の背景色（洗浄指示）
@@ -235,12 +250,12 @@ class CleaningInstructionTableModel(BaseTableModel):
 
             # 優先度2: 材質識別の背景色
             if col_name == 'material_id' and str(row_data.get('material_id')) == '5':
-                color_hex = self._config.get("colors", {}).get("material_id_background_yellow", "#FFFBEA")
+                color_hex = self._config.get("colors", {}).get("material_id_background_yellow", "#FFD54F")
                 return QColor(color_hex)
 
             # 優先度3: セット項目の背景色
             if self._is_set_logically(row_data) and col_name != 'cleaning_instruction':
-                color_hex = self._config.get("colors", {}).get("set_background_green", "#D4EDDA")
+                color_hex = self._config.get("colors", {}).get("set_background_green", "#81C784")
                 return QColor(color_hex)
 
         return None
