@@ -4,7 +4,8 @@ from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
     QTableView, QDateEdit, QPushButton,
     QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView,
-    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy, QScrollArea
+    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy, QScrollArea,
+    QStyle
 )
 from PySide6.QtCore import QDate, Slot, Qt, QModelIndex
 
@@ -104,10 +105,12 @@ class MainWindow(QMainWindow):
 
         # --- ページ切り替えボタンを上部コントロールに移動 ---
         self.main_page_button = QPushButton("Main")
+        self.main_page_button.setIcon(self.style().standardIcon(QStyle.SP_DirHomeIcon))
         self.main_page_button.setCheckable(True)
         self.main_page_button.setProperty("class", "page-button")
         
         self.cleaning_page_button = QPushButton("洗浄指示管理")
+        self.cleaning_page_button.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
         self.cleaning_page_button.setCheckable(True)
         self.cleaning_page_button.setProperty("class", "page-button")
 
@@ -198,6 +201,7 @@ class MainWindow(QMainWindow):
         self.destination_date_edit.setCalendarPopup(True)
         copy_layout.addWidget(self.destination_date_edit)
         self.copy_instructions_button = QPushButton("洗浄指示を複製")
+        self.copy_instructions_button.setIcon(self.style().standardIcon(QStyle.SP_DialogSaveButton))
         copy_layout.addWidget(self.copy_instructions_button)
         copy_layout.addStretch()
         
