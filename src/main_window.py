@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
     QTableView, QDateEdit, QPushButton,
     QHBoxLayout, QStatusBar, QLabel, QMessageBox, QHeaderView,
-    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy
+    QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy, QScrollArea
 )
 from PySide6.QtCore import QDate, Slot, Qt, QModelIndex
 
@@ -80,19 +80,30 @@ QComboBox, QLineEdit, QDateEdit {
     min-height: 32px;
 }
 QComboBox::drop-down, QDateEdit::drop-down {
+    background-color: white !important;
     border: none;
     width: 20px;
     subcontrol-origin: padding;
     subcontrol-position: top right;
 }
-QComboBox QAbstractItemView, QDateEdit QAbstractItemView {
-    background-color: #FFFFFF;
+
+QComboBox::down-arrow {
+    image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><polygon points='0,0 10,0 5,10' fill='black'/></svg>");
+    background-color: transparent; /* Ensure arrow background is transparent */
+}
+QComboBox QAbstractItemView {
+    background-color: white !important;
     border: 1px solid #CED4DA;
-    selection-background-color: #E9ECEF; /* Subtle selection */
+    selection-background-color: #E9ECEF;
     selection-color: #343A40;
-    color: #343A40;
+    color: black !important; /* Changed to black for visibility */
     outline: 0px;
     border-radius: 8px;
+}
+
+QComboBox QListView {
+    background-color: white !important;
+    color: black !important;
 }
 
 /* CheckBox */
@@ -166,7 +177,7 @@ QStatusBar {
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("洗浄依頼管理アプリ")
+        self.setWindowTitle("洗浄依頼管理App")
         self.setGeometry(100, 100, 1800, 960)
         self.showMaximized()
 
@@ -181,15 +192,15 @@ class MainWindow(QMainWindow):
 
         # --- モデルの初期化 ---
         self.main_models = {
-            'left': MainTableModel(config=self.config, line_filter=['A', 'B']),
-            'center': MainTableModel(config=self.config, line_filter=['C', 'D']),
-            'right': MainTableModel(config=self.config, line_filter=['E', 'F'])
+            'left': MainTableModel(config=self.config),
+            'center': MainTableModel(config=self.config),
+            'right': MainTableModel(config=self.config)
         }
         self.main_table_view_left.setModel(self.main_models['left'])
         self.main_table_view_center.setModel(self.main_models['center'])
         self.main_table_view_right.setModel(self.main_models['right'])
 
-        self.cleaning_model = CleaningInstructionTableModel(config=self.config, line_filter=None)
+        self.cleaning_model = CleaningInstructionTableModel(config=self.config)
         self.cleaning_table_view.setModel(self.cleaning_model)
 
         # 未払い出し機番モデルの初期化
@@ -210,6 +221,7 @@ class MainWindow(QMainWindow):
         # --- シグナルとスロットの接続 ---
         self.page_button_group.idClicked.connect(self.pages_stack.setCurrentIndex)
         self.date_edit.dateChanged.connect(self.load_data_for_selected_date)
+        self.copy_instructions_button.clicked.connect(self.handle_copy_instructions)
         
         for model in self.all_models:
             model.db_update_signal.connect(self.update_database_record)
@@ -220,13 +232,14 @@ class MainWindow(QMainWindow):
 
     def setup_ui(self):
         central_widget = QWidget()
-        self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(15)
 
-        title_label = QLabel("洗浄依頼管理")
-        title_label.setObjectName("mainTitle")
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(central_widget)
+        self.setCentralWidget(scroll_area)
 
         # --- 上部コントロール ---
         top_controls_layout = QHBoxLayout()
@@ -237,8 +250,7 @@ class MainWindow(QMainWindow):
         top_controls_layout.addWidget(self.date_edit)
         top_controls_layout.addStretch()
 
-        # --- ページ切り替えボタン ---
-        page_button_layout = QHBoxLayout()
+        # --- ページ切り替えボタンを上部コントロールに移動 ---
         self.main_page_button = QPushButton("Main")
         self.main_page_button.setCheckable(True)
         self.main_page_button.setProperty("class", "page-button")
@@ -252,9 +264,9 @@ class MainWindow(QMainWindow):
         self.page_button_group.addButton(self.cleaning_page_button, 1)
         self.main_page_button.setChecked(True) # 初期状態
 
-        page_button_layout.addWidget(self.main_page_button)
-        page_button_layout.addWidget(self.cleaning_page_button)
-        page_button_layout.addStretch()
+        top_controls_layout.addWidget(self.main_page_button)
+        top_controls_layout.addWidget(self.cleaning_page_button)
+        top_controls_layout.addStretch() # 右端に寄せるため
 
         # --- ページスタック ---
         self.pages_stack = QStackedWidget()
@@ -264,16 +276,46 @@ class MainWindow(QMainWindow):
         main_page_widget = QWidget()
         main_page_layout = QHBoxLayout(main_page_widget)
         self.main_table_view_left = QTableView()
+        self.main_table_view_left.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_left.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.main_table_view_center = QTableView()
+        self.main_table_view_center.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_center.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.main_table_view_right = QTableView()
-        main_page_layout.addWidget(self.main_table_view_left)
-        main_page_layout.addWidget(self.main_table_view_center)
-        main_page_layout.addWidget(self.main_table_view_right)
+        self.main_table_view_right.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_right.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        main_page_layout.addWidget(self.main_table_view_left, 0, Qt.AlignTop)
+        main_page_layout.addWidget(self.main_table_view_center, 0, Qt.AlignTop)
+        main_page_layout.addWidget(self.main_table_view_right, 0, Qt.AlignTop)
         self.pages_stack.addWidget(main_page_widget)
 
-        # 洗浄指示管理ページ (1つ)
+        # 洗浄指示管理ページ
+        cleaning_page_widget = QWidget()
+        cleaning_page_layout = QVBoxLayout(cleaning_page_widget)
+
+        # --- コピー機能UI ---
+        copy_widget = QWidget()
+        copy_layout = QHBoxLayout(copy_widget)
+        copy_layout.setContentsMargins(0, 0, 0, 0)
+        copy_layout.addWidget(QLabel("コピー元日付:"))
+        self.source_date_edit = QDateEdit(QDate.currentDate())
+        self.source_date_edit.setCalendarPopup(True)
+        copy_layout.addWidget(self.source_date_edit)
+        copy_layout.addWidget(QLabel("  コピー先日付:"))
+        self.destination_date_edit = QDateEdit(QDate.currentDate())
+        self.destination_date_edit.setCalendarPopup(True)
+        copy_layout.addWidget(self.destination_date_edit)
+        self.copy_instructions_button = QPushButton("洗浄指示を複製")
+        copy_layout.addWidget(self.copy_instructions_button)
+        copy_layout.addStretch()
+        
+        cleaning_page_layout.addWidget(copy_widget)
+
+        # --- テーブル ---
         self.cleaning_table_view = QTableView()
-        self.pages_stack.addWidget(self.cleaning_table_view)
+        cleaning_page_layout.addWidget(self.cleaning_table_view)
+
+        self.pages_stack.addWidget(cleaning_page_widget)
 
         # --- 未払い出し機番テーブル ---
         unprocessed_widget = QWidget()
@@ -287,13 +329,16 @@ class MainWindow(QMainWindow):
         # タイトルに背景色を適用
         unprocessed_colors = self.config.get("colors", {})
         manufacturing_title_color = unprocessed_colors.get("unprocessed_manufacturing_bg_color", "#E0F7FA")
-        manufacturing_unprocessed_title.setStyleSheet(f"background-color: {manufacturing_title_color}; padding: 5px; border-radius: 5px;")
+        manufacturing_unprocessed_title.setStyleSheet(f"background-color: {manufacturing_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.manufacturing_unprocessed_table_view = QTableView()
         self.manufacturing_unprocessed_table_view.setObjectName("manufacturingUnprocessedTable")
         self.manufacturing_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.manufacturing_unprocessed_table_view.verticalHeader().setVisible(False)
         self.manufacturing_unprocessed_table_view.setEditTriggers(QTableView.NoEditTriggers)
         self.manufacturing_unprocessed_table_view.horizontalHeader().setMinimumSectionSize(80) # Set minimum column width
+        self.manufacturing_unprocessed_table_view.setMinimumWidth(600) # Added minimum width to ensure space for all 6 columns
+        self.manufacturing_unprocessed_table_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.manufacturing_unprocessed_table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         manufacturing_unprocessed_layout.addWidget(manufacturing_unprocessed_title)
         manufacturing_unprocessed_layout.addWidget(self.manufacturing_unprocessed_table_view)
         unprocessed_layout.addWidget(manufacturing_unprocessed_container)
@@ -305,21 +350,22 @@ class MainWindow(QMainWindow):
         cleaning_unprocessed_title.setObjectName("unprocessedTitle")
         # タイトルに背景色を適用
         cleaning_title_color = unprocessed_colors.get("unprocessed_cleaning_bg_color", "#FFF3E0")
-        cleaning_unprocessed_title.setStyleSheet(f"background-color: {cleaning_title_color}; padding: 5px; border-radius: 5px;")
+        cleaning_unprocessed_title.setStyleSheet(f"background-color: {cleaning_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.cleaning_unprocessed_table_view = QTableView()
         self.cleaning_unprocessed_table_view.setObjectName("cleaningUnprocessedTable")
         self.cleaning_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.cleaning_unprocessed_table_view.verticalHeader().setVisible(False)
         self.cleaning_unprocessed_table_view.setEditTriggers(QTableView.NoEditTriggers)
         self.cleaning_unprocessed_table_view.horizontalHeader().setMinimumSectionSize(80) # Set minimum column width
+        self.cleaning_unprocessed_table_view.setMinimumWidth(600) # Added minimum width to ensure space for all 6 columns
+        self.cleaning_unprocessed_table_view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.cleaning_unprocessed_table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         cleaning_unprocessed_layout.addWidget(cleaning_unprocessed_title)
         cleaning_unprocessed_layout.addWidget(self.cleaning_unprocessed_table_view)
         unprocessed_layout.addWidget(cleaning_unprocessed_container)
 
         # --- 全体レイアウト ---
-        main_layout.addWidget(title_label)
         main_layout.addLayout(top_controls_layout)
-        main_layout.addLayout(page_button_layout)
         main_layout.addWidget(self.pages_stack)
         main_layout.addWidget(unprocessed_widget)
 
@@ -334,6 +380,13 @@ class MainWindow(QMainWindow):
             header = view.horizontalHeader()
             model = view.model()
             if not model: continue
+            
+            # 未払い出し機番テーブルの列幅設定
+            if isinstance(model, UnprocessedMachineNumbersTableModel):
+                for i in range(model.columnCount()):
+                    view.setColumnWidth(i, 100) # Explicitly set fixed width for all columns
+                continue # 未払い出し機番テーブルはこれ以上設定しない
+
             for i in range(model.columnCount()):
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
@@ -345,7 +398,7 @@ class MainWindow(QMainWindow):
             "part_number": 95,
             "product_name": 95,
             "customer_name": 95,
-            "remarks": 90,
+            "remarks": 85,
         }
 
         for col_name, width in fixed_width_columns.items():
@@ -380,6 +433,28 @@ class MainWindow(QMainWindow):
             self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
+    def adjust_main_table_height(self, table_view):
+        # ヘッダーの高さ
+        header_height = table_view.horizontalHeader().height()
+        # 各行の高さの合計
+        rows_height = sum(table_view.rowHeight(i) for i in range(table_view.model().rowCount()))
+        # グリッド線の高さ (行数 - 1) * グリッド線幅 (仮に1px)
+        grid_lines_height = (table_view.model().rowCount() - 1) * 1 if table_view.model().rowCount() > 0 else 0
+        # 合計高さ
+        total_height = header_height + rows_height + grid_lines_height + 2 # +2 for border/padding
+        table_view.setFixedHeight(total_height)
+
+    def adjust_unprocessed_table_height(self, table_view):
+        # ヘッダーの高さ
+        header_height = table_view.horizontalHeader().height()
+        # 各行の高さの合計
+        rows_height = sum(table_view.rowHeight(i) for i in range(table_view.model().rowCount()))
+        # グリッド線の高さ (行数 - 1) * グリッド線幅 (仮に1px)
+        grid_lines_height = (table_view.model().rowCount() - 1) * 1 if table_view.model().rowCount() > 0 else 0
+        # 合計高さ
+        total_height = header_height + rows_height + grid_lines_height + 2 # +2 for border/padding
+        table_view.setFixedHeight(total_height)
+
     @Slot(QModelIndex)
     def handle_table_click(self, index):
         if not index.isValid(): return
@@ -394,10 +469,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def refresh_unprocessed_list_from_model(self):
-        if self.manufacturing_unprocessed_model and self.cleaning_unprocessed_model:
-            all_data = self.main_models['left'].get_all_data() # Get all data from one of the main models
-            self.manufacturing_unprocessed_model.load_data(all_data)
-            self.cleaning_unprocessed_model.load_data(all_data)
+        # 全てのデータを再ロードして、未払い出しリストを更新
+        self.load_data_for_selected_date()
 
     @Slot()
     def connect_to_db_and_load_data(self):
@@ -420,11 +493,69 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"エラー: {error}")
             QMessageBox.warning(self, "データベースエラー", f"データの読み込みに失敗しました。\n\n詳細: {error}")
         else:
-            for model in self.all_models:
-                model.load_data(data)
+            # Mainテーブルのデータスライスとロード
+            left_data = data[:20]
+            center_data = data[20:40]
+            right_data = data[40:]
+
+            self.main_models['left'].load_data(left_data)
+            self.main_models['center'].load_data(center_data)
+            self.main_models['right'].load_data(right_data)
+
+            # 洗浄指示管理テーブルのロード
+            self.cleaning_model.load_data(data)
+
+            # 未払い出し機番テーブルのロード
             self.manufacturing_unprocessed_model.load_data(data)
             self.cleaning_unprocessed_model.load_data(data)
+
             self.status_label.setText(f"{selected_date} のデータ {len(data)} 件を読み込みました。")
+
+            # メインテーブルの高さ調整
+            self.adjust_main_table_height(self.main_table_view_left)
+            self.adjust_main_table_height(self.main_table_view_center)
+            self.adjust_main_table_height(self.main_table_view_right)
+
+            # 未払い出し機番テーブルの高さ調整
+            self.adjust_unprocessed_table_height(self.manufacturing_unprocessed_table_view)
+            self.adjust_unprocessed_table_height(self.cleaning_unprocessed_table_view)
+            self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
+            self.cleaning_unprocessed_table_view.resizeColumnsToContents()
+
+    @Slot()
+    def handle_copy_instructions(self):
+        source_date = self.source_date_edit.date()
+        dest_date = self.destination_date_edit.date()
+
+        if source_date == dest_date:
+            QMessageBox.warning(self, "日付エラー", "コピー元とコピー先の日付が同じです。")
+            return
+
+        source_date_str = source_date.toString("yyyy-MM-dd")
+        dest_date_str = dest_date.toString("yyyy-MM-dd")
+
+        reply = QMessageBox.question(self, "実行確認",
+                                     f"{source_date_str} の洗浄指示を、\n"
+                                     f"{dest_date_str} のデータに複製します。\n"
+                                     f"（同じ機番の洗浄指示が上書きされます）\n\n"
+                                     f"よろしいですか？",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+
+        if reply == QMessageBox.Yes:
+            self.status_label.setText("洗浄指示を複製中...")
+            QApplication.processEvents() # UIの更新を強制
+
+            success, result = self.db_handler.copy_cleaning_instructions(source_date_str, dest_date_str)
+
+            if success:
+                QMessageBox.information(self, "成功", f"{result}件の洗浄指示を複製しました。")
+                self.status_label.setText(f"{result}件の洗浄指示を複製しました。")
+                # 現在表示中の日付がコピー先の日付だったら、UIを即時更新
+                if self.date_edit.date() == dest_date:
+                    self.load_data_for_selected_date()
+            else:
+                QMessageBox.critical(self, "エラー", f"処理に失敗しました。\n\n詳細: {result}")
+                self.status_label.setText(f"複製に失敗しました: {result}")
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):
@@ -450,6 +581,32 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+
+    # Create and set a light palette to override system dark mode
+    from PySide6.QtGui import QPalette, QColor
+    
+    light_palette = QPalette()
+    light_palette.setColor(QPalette.Window, QColor("#F0F0F0"))
+    light_palette.setColor(QPalette.WindowText, Qt.black)
+    light_palette.setColor(QPalette.Base, Qt.white)
+    light_palette.setColor(QPalette.AlternateBase, QColor("#F0F0F0"))
+    light_palette.setColor(QPalette.ToolTipBase, Qt.white)
+    light_palette.setColor(QPalette.ToolTipText, Qt.black)
+    light_palette.setColor(QPalette.Text, Qt.black)
+    light_palette.setColor(QPalette.Button, QColor("#F0F0F0"))
+    light_palette.setColor(QPalette.ButtonText, Qt.black)
+    light_palette.setColor(QPalette.BrightText, Qt.red)
+    light_palette.setColor(QPalette.Link, QColor(0, 0, 255))
+    light_palette.setColor(QPalette.Highlight, QColor(0, 120, 215))
+    light_palette.setColor(QPalette.HighlightedText, Qt.white)
+    
+    # Set colors for disabled state
+    light_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
+    light_palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
+    light_palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+    
+    app.setPalette(light_palette)
+
     app.setStyleSheet(FINAL_STYLESHEET)
     window = MainWindow()
     window.show()

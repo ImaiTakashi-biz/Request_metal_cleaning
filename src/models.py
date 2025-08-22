@@ -33,10 +33,25 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
         editor = QComboBox(parent)
         editor.addItems(self.items)
         editor.setEditable(True)
-        # 選択が変更されたときにsetModelDataを呼び出す
-        editor.currentIndexChanged.connect(lambda: self.setModelData(editor, index.model(), index))
-        # テキストが変更されたときにもsetModelDataを呼び出す (編集可能な場合)
-        editor.editTextChanged.connect(lambda: self.setModelData(editor, index.model(), index))
+        # Explicitly set stylesheet for the editor and its dropdown view
+        editor.setStyleSheet("""
+            QComboBox {
+                background-color: white;
+                color: black;
+                border: 1px solid #CED4DA;
+            }
+            QComboBox QAbstractItemView {
+                background-color: white;
+                color: black;
+                selection-background-color: #E9ECEF;
+                selection-color: #343A40;
+                border: 1px solid #CED4DA;
+            }
+            QComboBox QListView {
+                background-color: white;
+                color: black;
+            }
+        """)
         return editor
 
     def setEditorData(self, editor, index):
@@ -53,16 +68,13 @@ class BaseTableModel(QAbstractTableModel):
     db_update_signal = Signal(int, str, object)
     data_changed_for_unprocessed_list = Signal()
 
-    def __init__(self, data=None, config=None, parent=None, line_filter=None):
+    def __init__(self, data=None, config=None, parent=None):
         super().__init__(parent)
-        self._all_data = data or []
-        self._data = []
+        self._data = data or [] # _data will now directly hold the data passed to load_data
         self._config = config or {}
-        self._line_filter = line_filter
         self._headers = []
         self._display_headers = {}
         self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date", "quantity", "material_id"]
-        self.filter_and_load(self._all_data)
 
     def rowCount(self, parent=QModelIndex()):
         return len(self._data)
@@ -78,18 +90,11 @@ class BaseTableModel(QAbstractTableModel):
 
     def load_data(self, new_data):
         self.beginResetModel()
-        self._all_data = new_data
-        self.filter_and_load(self._all_data)
+        self._data = new_data # Directly set the data
         self.endResetModel()
 
-    def filter_and_load(self, source_data):
-        if not self._line_filter:
-            self._data = source_data
-        else:
-            self._data = [row for row in source_data if row.get('machine_no') and row.get('machine_no')[0] in self._line_filter]
-
     def get_all_data(self):
-        return self._all_data
+        return self._data # Now returns the data currently loaded in the model
 
     def _is_set_logically(self, row_data):
         set_date_str = row_data.get("set_date")
@@ -125,8 +130,8 @@ class BaseTableModel(QAbstractTableModel):
 
 class MainTableModel(BaseTableModel):
     """Mainページ用のテーブルモデル"""
-    def __init__(self, data=None, config=None, parent=None, line_filter=None):
-        super().__init__(data, config, parent, line_filter)
+    def __init__(self, data=None, config=None, parent=None):
+        super().__init__(data, config, parent)
         self._headers = [
             "machine_no", 
             "manufacturing_check", 
@@ -213,8 +218,8 @@ class MainTableModel(BaseTableModel):
 
 class CleaningInstructionTableModel(BaseTableModel):
     """洗浄指示管理ページ用のテーブルモデル"""
-    def __init__(self, data=None, config=None, parent=None, line_filter=None):
-        super().__init__(data, config, parent, line_filter)
+    def __init__(self, data=None, config=None, parent=None):
+        super().__init__(data, config, parent)
         self._headers = [
             "set_date", "machine_no", "customer_name", "part_number", 
             "product_name", "next_process", "quantity", "completion_date", "material_id", "cleaning_instruction"
@@ -316,6 +321,8 @@ class UnprocessedMachineNumbersTableModel(QAbstractTableModel):
         for line_char in self._filtered_data:
             self._filtered_data[line_char].sort()
 
+        print(f"UnprocessedModel ({self._check_column}) filtered data: {self._filtered_data}") # Debug print
+
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()):
@@ -339,6 +346,9 @@ class UnprocessedMachineNumbersTableModel(QAbstractTableModel):
             if index.row() < len(self._filtered_data[line_char]):
                 return self._filtered_data[line_char][index.row()]
             return None
+
+        if role == Qt.ForegroundRole:
+            return QColor(Qt.black)
         
         if role == Qt.TextAlignmentRole:
             return Qt.AlignCenter

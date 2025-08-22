@@ -65,3 +65,52 @@ class DatabaseHandler:
             self.conn.rollback()
             return False
 
+    def copy_cleaning_instructions(self, source_date, destination_date):
+        """
+        ある日付の洗浄指示を別の日付にコピーする
+        :param source_date: YYYY-MM-DD形式のコピー元日付
+        :param destination_date: YYYY-MM-DD形式のコピー先日付
+        :return: (成功したかどうか, 更新した件数またはエラーメッセージ)
+        """
+        if not self.conn:
+            return False, "データベースに接続されていません。"
+
+        # 1. コピー元の洗浄指示を取得 (機番をキーにした辞書を作成)
+        source_query = "SELECT machine_no, cleaning_instruction FROM production_plan WHERE acquisition_date = ? AND cleaning_instruction IS NOT NULL AND cleaning_instruction != ''"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(source_query, (source_date,))
+            source_rows = cursor.fetchall()
+            source_instructions = {row['machine_no']: row['cleaning_instruction'] for row in source_rows}
+        except sqlite3.Error as e:
+            return False, f"コピー元データの取得に失敗: {e}"
+
+        if not source_instructions:
+            return False, "コピー元の有効な洗浄指示データがありません。"
+
+        # 2. コピー先のレコードを取得
+        dest_query = "SELECT id, machine_no FROM production_plan WHERE acquisition_date = ?"
+        try:
+            cursor.execute(dest_query, (destination_date,))
+            dest_rows = cursor.fetchall()
+        except sqlite3.Error as e:
+            return False, f"コピー先データの取得に失敗: {e}"
+
+        # 3. トランザクション内で更新処理
+        update_query = "UPDATE production_plan SET cleaning_instruction = ? WHERE id = ?"
+        updated_count = 0
+        try:
+            self.conn.execute("BEGIN TRANSACTION")
+            for row in dest_rows:
+                machine_no = row['machine_no']
+                record_id = row['id']
+                if machine_no in source_instructions:
+                    new_instruction = source_instructions[machine_no]
+                    cursor.execute(update_query, (new_instruction, record_id))
+                    updated_count += 1
+            self.conn.commit()
+            return True, updated_count
+        except sqlite3.Error as e:
+            self.conn.rollback()
+            return False, f"データベースの更新に失敗: {e}"
+
