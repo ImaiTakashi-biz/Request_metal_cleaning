@@ -40,8 +40,10 @@ class MainWindow(QMainWindow):
         self.main_table_view_center.setModel(self.main_models['center'])
         self.main_table_view_right.setModel(self.main_models['right'])
 
-        self.cleaning_model = CleaningInstructionTableModel(config=self.config)
-        self.cleaning_table_view.setModel(self.cleaning_model)
+        self.cleaning_model_left = CleaningInstructionTableModel(config=self.config)
+        self.cleaning_table_view_left.setModel(self.cleaning_model_left)
+        self.cleaning_model_right = CleaningInstructionTableModel(config=self.config)
+        self.cleaning_table_view_right.setModel(self.cleaning_model_right)
 
         # 未払い出し機番モデルの初期化
         self.manufacturing_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='manufacturing_check', config=self.config)
@@ -50,8 +52,8 @@ class MainWindow(QMainWindow):
         self.cleaning_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='cleaning_check', config=self.config)
         self.cleaning_unprocessed_table_view.setModel(self.cleaning_unprocessed_model)
         
-        self.all_models = list(self.main_models.values()) + [self.cleaning_model]
-        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
+        self.all_models = list(self.main_models.values()) + [self.cleaning_model_left, self.cleaning_model_right]
+        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view_left, self.cleaning_table_view_right, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
 
         # 全てのテーブルに交互の背景色を有効にする
         for view in self.all_table_views:
@@ -196,8 +198,14 @@ class MainWindow(QMainWindow):
         cleaning_page_layout.addWidget(copy_widget)
 
         # --- テーブル ---
-        self.cleaning_table_view = QTableView()
-        cleaning_page_layout.addWidget(self.cleaning_table_view)
+        cleaning_tables_layout = QHBoxLayout()
+        self.cleaning_table_view_left = QTableView()
+        self.cleaning_table_view_left.setObjectName("cleaning_table_view_left") # IDを設定
+        self.cleaning_table_view_right = QTableView()
+        self.cleaning_table_view_right.setObjectName("cleaning_table_view_right") # IDを設定
+        cleaning_tables_layout.addWidget(self.cleaning_table_view_left)
+        cleaning_tables_layout.addWidget(self.cleaning_table_view_right)
+        cleaning_page_layout.addLayout(cleaning_tables_layout)
 
         self.pages_stack.addWidget(cleaning_page_widget)
 
@@ -288,7 +296,8 @@ class MainWindow(QMainWindow):
             view.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
 
         # 洗浄指示管理ページのテーブル
-        self.cleaning_table_view.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
+        self.cleaning_table_view_left.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
+        self.cleaning_table_view_right.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
 
         # Mainページのテーブルの指定された列を固定幅に設定
         main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
@@ -314,6 +323,32 @@ class MainWindow(QMainWindow):
             except ValueError:
                 pass # カラムが見つからない場合は何もしない
 
+        # 洗浄指示管理ページのテーブルの指定された列を固定幅に設定
+        cleaning_views = [self.cleaning_table_view_left, self.cleaning_table_view_right]
+        
+        fixed_width_cleaning_columns = {
+            "customer_name": 95,
+            "part_number": 95,
+            "product_name": 95,
+            "next_process": 150,
+            "material_id": 35,
+            "set_date": 70,       # セット予定日の列幅を70に固定
+            "completion_date": 70, # 加工終了日の列幅を70に固定
+        }
+
+        for col_name, width in fixed_width_cleaning_columns.items():
+            try:
+                # モデルのヘッダー定義は共通なので、どれか一つからインデックスを取得
+                col_index = self.cleaning_model_left._headers.index(col_name)
+                for view in cleaning_views:
+                    header = view.horizontalHeader()
+                    # 固定サイズモードに設定
+                    header.setSectionResizeMode(col_index, QHeaderView.Fixed)
+                    # 幅を設定
+                    view.setColumnWidth(col_index, width)
+            except ValueError:
+                pass # カラムが見つからない場合は何もしない
+
     def setup_delegates(self):
         # Mainテーブルのデリゲート
         try:
@@ -327,10 +362,11 @@ class MainWindow(QMainWindow):
 
         # 洗浄指示管理テーブルのデリゲート
         try:
-            col_index = self.cleaning_model._headers.index("cleaning_instruction")
+            col_index = self.cleaning_model_left._headers.index("cleaning_instruction") # cleaning_model_left を使用
             items = ["", "1", "2", "3", "4"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view)
-            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
+            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view_left) # parent も変更
+            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
+            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate) # right にも適用
         except ValueError: pass
 
     def adjust_main_table_height(self, table_view):
@@ -403,7 +439,17 @@ class MainWindow(QMainWindow):
             self.main_models['right'].load_data(right_data)
 
             # 洗浄指示管理テーブルのロード
-            self.cleaning_model.load_data(data)
+            
+            # 機番でフィルタリングして左右のテーブルにロード
+            left_machine_numbers = ['A', 'B', 'C', 'D']
+            right_machine_numbers = ['E', 'F']
+
+            # データのコピーを作成し、フィルタリング
+            filtered_data_left = [item for item in data if item.get('machine_no') and item['machine_no'][0] in left_machine_numbers]
+            filtered_data_right = [item for item in data if item.get('machine_no') and item['machine_no'][0] in right_machine_numbers]
+
+            self.cleaning_model_left.load_data(filtered_data_left)
+            self.cleaning_model_right.load_data(filtered_data_right)
 
             # 未払い出し機番テーブルのロード
             self.manufacturing_unprocessed_model.load_data(data)

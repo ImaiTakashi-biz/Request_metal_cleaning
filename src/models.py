@@ -88,9 +88,14 @@ class BaseTableModel(QAbstractTableModel):
             return self._display_headers.get(col_name, col_name)
         return None
 
-    def load_data(self, new_data):
+    def load_data(self, data, machine_number_filter=None):
         self.beginResetModel()
-        self._data = new_data # Directly set the data
+        if machine_number_filter:
+            # machine_number_filter が指定されている場合、その機番に一致するデータのみをフィルタリング
+            self._data = [row for row in data if row.get('machine_no') in machine_number_filter]
+        else:
+            # machine_number_filter が指定されていない場合、すべてのデータをロード
+            self._data = data
         self.endResetModel()
 
     def get_all_data(self):
@@ -233,7 +238,7 @@ class CleaningInstructionTableModel(BaseTableModel):
             "next_process": "次工程",
             "quantity": "数量",
             "completion_date": "加工終了日",
-            "material_id": "材質識別",
+            "material_id": "識別",
             "cleaning_instruction": "洗浄指示",
         }
 
