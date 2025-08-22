@@ -326,11 +326,13 @@ class MainWindow(QMainWindow):
         manufacturing_unprocessed_layout = QVBoxLayout(manufacturing_unprocessed_container)
         manufacturing_unprocessed_title = QLabel("製造未払い出し機番")
         manufacturing_unprocessed_title.setObjectName("unprocessedTitle")
+        manufacturing_unprocessed_title.setFixedHeight(35) # 固定高さに設定
         # タイトルに背景色を適用
         unprocessed_colors = self.config.get("colors", {})
         manufacturing_title_color = unprocessed_colors.get("unprocessed_manufacturing_bg_color", "#E0F7FA")
         manufacturing_unprocessed_title.setStyleSheet(f"background-color: {manufacturing_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.manufacturing_unprocessed_table_view = QTableView()
+        self.manufacturing_unprocessed_table_view.setFixedHeight(250) # 固定高さに設定
         self.manufacturing_unprocessed_table_view.setObjectName("manufacturingUnprocessedTable")
         self.manufacturing_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.manufacturing_unprocessed_table_view.verticalHeader().setVisible(False)
@@ -348,10 +350,12 @@ class MainWindow(QMainWindow):
         cleaning_unprocessed_layout = QVBoxLayout(cleaning_unprocessed_container)
         cleaning_unprocessed_title = QLabel("洗浄未払い出し機番")
         cleaning_unprocessed_title.setObjectName("unprocessedTitle")
+        cleaning_unprocessed_title.setFixedHeight(35) # 固定高さに設定
         # タイトルに背景色を適用
         cleaning_title_color = unprocessed_colors.get("unprocessed_cleaning_bg_color", "#FFF3E0")
         cleaning_unprocessed_title.setStyleSheet(f"background-color: {cleaning_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.cleaning_unprocessed_table_view = QTableView()
+        self.cleaning_unprocessed_table_view.setFixedHeight(250) # 固定高さに設定
         self.cleaning_unprocessed_table_view.setObjectName("cleaningUnprocessedTable")
         self.cleaning_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.cleaning_unprocessed_table_view.verticalHeader().setVisible(False)
@@ -385,6 +389,7 @@ class MainWindow(QMainWindow):
             if isinstance(model, UnprocessedMachineNumbersTableModel):
                 for i in range(model.columnCount()):
                     view.setColumnWidth(i, 100) # Explicitly set fixed width for all columns
+                view.horizontalHeader().setFixedHeight(30) # ヘッダーの高さ固定
                 continue # 未払い出し機番テーブルはこれ以上設定しない
 
             for i in range(model.columnCount()):
@@ -516,9 +521,6 @@ class MainWindow(QMainWindow):
             self.adjust_main_table_height(self.main_table_view_center)
             self.adjust_main_table_height(self.main_table_view_right)
 
-            # 未払い出し機番テーブルの高さ調整
-            self.adjust_unprocessed_table_height(self.manufacturing_unprocessed_table_view)
-            self.adjust_unprocessed_table_height(self.cleaning_unprocessed_table_view)
             self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
             self.cleaning_unprocessed_table_view.resizeColumnsToContents()
 

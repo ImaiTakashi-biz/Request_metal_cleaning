@@ -244,6 +244,8 @@ class CleaningInstructionTableModel(BaseTableModel):
 
         if role == Qt.DisplayRole or role == Qt.EditRole:
             value = row_data.get(col_name, "")
+            if col_name == "cleaning_instruction" and str(value) == "0":
+                return ""
             if col_name in ["set_date", "completion_date"] and value:
                 return str(value).split(' ')[0]
             return value
