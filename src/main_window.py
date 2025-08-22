@@ -145,13 +145,14 @@ QTableView::item, QTableWidget::item {
     color: #343A40;
 }
 QTableView::item:selected, QTableWidget::item:selected {
-    background-color: #E9ECEF;
+    background-color: #E9ECEF; /* Less prominent background */
     color: #343A40;
+    border: 1px solid #CED4DA; /* Thinner, less contrasting border */
 }
 
 /* Table Header */
 QHeaderView::section {
-    background-color: #F8F9FA; /* Lighter header background */
+    background-color: #DEE2E6; /* New header background color */
     padding: 12px 12px; /* More padding */
     border: none;
     border-bottom: 2px solid #DEE2E6;
@@ -212,6 +213,10 @@ class MainWindow(QMainWindow):
         
         self.all_models = list(self.main_models.values()) + [self.cleaning_model]
         self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
+
+        # 全てのテーブルに交互の背景色を有効にする
+        for view in self.all_table_views:
+            view.setAlternatingRowColors(True)
 
         self.setup_delegates()
         self.setup_table_columns()
@@ -394,6 +399,17 @@ class MainWindow(QMainWindow):
 
             for i in range(model.columnCount()):
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+
+        # Mainページと洗浄指示管理ページのヘッダーに強調色を設定
+        emphasized_header_color = "#8DAAE0" # 強調したい背景色
+
+        # Mainページのテーブル
+        main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
+        for view in main_views:
+            view.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
+
+        # 洗浄指示管理ページのテーブル
+        self.cleaning_table_view.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
 
         # Mainページのテーブルの指定された列を固定幅に設定
         main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
