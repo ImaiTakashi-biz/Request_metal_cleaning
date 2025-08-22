@@ -92,6 +92,12 @@ class MainWindow(QMainWindow):
         date_label = QLabel("日付選択:")
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
+        self.date_edit.calendarWidget().setStyleSheet("""
+            QAbstractItemView:enabled {
+                selection-background-color: #0078d7; /* 選択日の背景色 */
+                selection-color: white;             /* 選択日の文字色 */
+            }
+        """)
         top_controls_layout.addWidget(date_label)
         top_controls_layout.addWidget(self.date_edit)
         top_controls_layout.addStretch()
