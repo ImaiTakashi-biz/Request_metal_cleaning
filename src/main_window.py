@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
             color_swatch.setFixedSize(15, 15) # 色見本のサイズ
             color_swatch.setStyleSheet(f"background-color: {color_hex}; border: 1px solid #CED4DA; border-radius: 3px;")
 
-            description_label = QLabel(desc)
+            description_label = QLabel(f"{num}: {desc}")
             description_label.setStyleSheet("font-size: 12px; color: #495057;") # 説明文のスタイル
 
             item_layout.addWidget(color_swatch)
@@ -224,7 +224,6 @@ class MainWindow(QMainWindow):
         manufacturing_title_color = unprocessed_colors.get("unprocessed_manufacturing_bg_color", "#E0F7FA")
         manufacturing_unprocessed_title.setStyleSheet(f"background-color: {manufacturing_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.manufacturing_unprocessed_table_view = QTableView()
-        self.manufacturing_unprocessed_table_view.setFixedHeight(250) # 固定高さに設定
         self.manufacturing_unprocessed_table_view.setObjectName("manufacturingUnprocessedTable")
         self.manufacturing_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.manufacturing_unprocessed_table_view.verticalHeader().setVisible(False)
@@ -235,7 +234,7 @@ class MainWindow(QMainWindow):
         self.manufacturing_unprocessed_table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         manufacturing_unprocessed_layout.addWidget(manufacturing_unprocessed_title)
         manufacturing_unprocessed_layout.addWidget(self.manufacturing_unprocessed_table_view)
-        unprocessed_layout.addWidget(manufacturing_unprocessed_container)
+        unprocessed_layout.addWidget(manufacturing_unprocessed_container, 0, Qt.AlignTop)
 
         # 洗浄未払い出し機番テーブル (右側)
         cleaning_unprocessed_container = QWidget()
@@ -247,7 +246,6 @@ class MainWindow(QMainWindow):
         cleaning_title_color = unprocessed_colors.get("unprocessed_cleaning_bg_color", "#FFF3E0")
         cleaning_unprocessed_title.setStyleSheet(f"background-color: {cleaning_title_color}; color: black; padding: 5px; border-radius: 5px;")
         self.cleaning_unprocessed_table_view = QTableView()
-        self.cleaning_unprocessed_table_view.setFixedHeight(250) # 固定高さに設定
         self.cleaning_unprocessed_table_view.setObjectName("cleaningUnprocessedTable")
         self.cleaning_unprocessed_table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.cleaning_unprocessed_table_view.verticalHeader().setVisible(False)
@@ -258,7 +256,7 @@ class MainWindow(QMainWindow):
         self.cleaning_unprocessed_table_view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         cleaning_unprocessed_layout.addWidget(cleaning_unprocessed_title)
         cleaning_unprocessed_layout.addWidget(self.cleaning_unprocessed_table_view)
-        unprocessed_layout.addWidget(cleaning_unprocessed_container)
+        unprocessed_layout.addWidget(cleaning_unprocessed_container, 0, Qt.AlignTop)
 
         # --- 全体レイアウト ---
         main_layout.addLayout(top_controls_layout)
@@ -461,6 +459,10 @@ class MainWindow(QMainWindow):
             self.adjust_main_table_height(self.main_table_view_left)
             self.adjust_main_table_height(self.main_table_view_center)
             self.adjust_main_table_height(self.main_table_view_right)
+
+            # 未払い出し機番テーブルの高さ調整
+            self.adjust_unprocessed_table_height(self.manufacturing_unprocessed_table_view)
+            self.adjust_unprocessed_table_height(self.cleaning_unprocessed_table_view)
 
             self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
             self.cleaning_unprocessed_table_view.resizeColumnsToContents()
