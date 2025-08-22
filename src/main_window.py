@@ -12,169 +12,6 @@ from config import load_config
 from database import DatabaseHandler
 from models import MainTableModel, CleaningInstructionTableModel, ComboBoxDelegate, EditableComboBoxDelegate, UnprocessedMachineNumbersTableModel
 
-FINAL_STYLESHEET = """
-/* Modern & Sophisticated UI Stylesheet */
-
-QMainWindow, QWidget {
-    background-color: #F8F9FA; /* Very light gray, almost white */
-    font-family: 'Noto Sans JP', 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif; /* Modern font stack */
-    color: #343A40; /* Darker text for better contrast */
-    font-size: 14px;
-}
-
-#mainTitle {
-    font-size: 28px; /* Larger title */
-    font-weight: 700; /* Bolder */
-    color: #2C48B3; /* Corporate blue */
-    padding: 15px 10px;
-    margin-bottom: 10px;
-    border-bottom: 1px solid #E9ECEF; /* Subtle separator */
-}
-
-#unprocessedTitle {
-    font-size: 18px;
-    font-weight: 600;
-    color: #343A40;
-    margin-bottom: 10px;
-}
-
-QPushButton {
-    background-color: #3457D5; /* Corporate blue */
-    color: white;
-    border: none;
-    padding: 12px 22px; /* Slightly larger padding */
-    font-size: 15px; /* Slightly larger font */
-    font-weight: 600;
-    border-radius: 8px; /* More rounded corners */
-    min-width: 120px;
-    transition: background-color 0.3s ease; /* Smooth transition */
-}
-QPushButton:hover {
-    background-color: #2C48B3; /* Darker blue on hover */
-}
-QPushButton:pressed {
-    background-color: #1A3A9A; /* Even darker on press */
-}
-
-QPushButton.page-button {
-    background-color: #E9ECEF;
-    color: #495057;
-    font-weight: 500;
-}
-
-QPushButton.page-button:checked {
-    background-color: #3457D5;
-    color: white;
-    font-weight: 600;
-}
-
-
-/* Consistent styling for input widgets */
-QComboBox, QLineEdit, QDateEdit {
-    background-color: #FFFFFF;
-    border: 1px solid #CED4DA; /* Lighter border */
-    border-radius: 8px; /* More rounded */
-    padding: 8px 12px; /* More padding */
-    color: #495057; /* Slightly softer text color */
-    font-size: 14px;
-    min-height: 32px;
-}
-QComboBox::drop-down, QDateEdit::drop-down {
-    background-color: white !important;
-    border: none;
-    width: 20px;
-    subcontrol-origin: padding;
-    subcontrol-position: top right;
-}
-
-QComboBox::down-arrow {
-    image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><polygon points='0,0 10,0 5,10' fill='black'/></svg>");
-    background-color: transparent; /* Ensure arrow background is transparent */
-}
-QComboBox QAbstractItemView {
-    background-color: white !important;
-    border: 1px solid #CED4DA;
-    selection-background-color: #E9ECEF;
-    selection-color: #343A40;
-    color: black !important; /* Changed to black for visibility */
-    outline: 0px;
-    border-radius: 8px;
-}
-
-QComboBox QListView {
-    background-color: white !important;
-    color: black !important;
-}
-
-/* CheckBox */
-QCheckBox {
-    color: #343A40;
-    spacing: 8px; /* More spacing */
-    font-size: 14px;
-}
-QCheckBox::indicator {
-    border: 1px solid #ADB5BD; /* Softer border */
-    border-radius: 4px; /* Slightly more rounded */
-    width: 18px; /* Larger indicator */
-    height: 18px;
-    background-color: #FFFFFF;
-}
-QCheckBox::indicator:hover {
-    border: 1px solid #3457D5;
-}
-QCheckBox::indicator:checked {
-    background-color: #3457D5;
-    border-color: #3457D5;
-}
-
-/* Table */
-QTableView, QTableWidget {
-    background-color: #FFFFFF;
-    border: 1px solid #E9ECEF; /* Subtle border for the whole table */
-    border-radius: 8px; /* Rounded corners for the table */
-    gridline-color: #F1F3F5;
-    font-size: 14px;
-    alternate-background-color: #FDFDFD;
-    selection-background-color: #E9ECEF; /* Consistent selection color */
-    selection-color: #343A40;
-    outline: 0; /* Remove focus outline */
-}
-QTableView::item, QTableWidget::item {
-    padding: 10px 12px; /* More padding for items */
-    border-bottom: 1px solid #E9ECEF; /* Lighter separator */
-    color: #343A40;
-}
-QTableView::item:selected, QTableWidget::item:selected {
-    background-color: #E9ECEF; /* Less prominent background */
-    color: #343A40;
-    border: 1px solid #CED4DA; /* Thinner, less contrasting border */
-}
-
-/* Table Header */
-QHeaderView::section {
-    background-color: #DEE2E6; /* New header background color */
-    padding: 12px 12px; /* More padding */
-    border: none;
-    border-bottom: 2px solid #DEE2E6;
-    font-size: 14px;
-    font-weight: 600;
-    color: #495057; /* Softer header text */
-    text-align: left; /* Align text to left */
-}
-QHeaderView::section:last {
-    border-right: none;
-}
-
-/* Status Bar */
-QStatusBar {
-    font-size: 13px;
-    background-color: #F8F9FA;
-    border-top: 1px solid #DEE2E6;
-    color: #495057;
-    padding: 5px 10px;
-}
-"""
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -186,6 +23,8 @@ class MainWindow(QMainWindow):
         if not self.config:
             self.show_critical_error("設定ファイル 'config.json' が見つからないか、不正です。")
             sys.exit(1)
+
+        self.design_config = self.config.get("design", {}) # 新しいデザイン設定を読み込む
 
         self.db_handler = DatabaseHandler(self.config['database']['path'])
 
@@ -441,7 +280,7 @@ class MainWindow(QMainWindow):
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
         # Mainページと洗浄指示管理ページのヘッダーに強調色を設定
-        emphasized_header_color = "#8DAAE0" # 強調したい背景色
+        emphasized_header_color = self.design_config.get("highlight_color", "#00BFFF") # configから強調色を取得
 
         # Mainページのテーブル
         main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
@@ -637,35 +476,197 @@ class MainWindow(QMainWindow):
             self.db_handler.close()
         super().closeEvent(event)
 
+    def _generate_stylesheet(self):
+        design = self.design_config
+
+        stylesheet = f"""
+        QMainWindow, QWidget {{
+            background-color: {design.get("background_color")};
+            font-family: {design.get("font_family")};
+            color: {design.get("text_color")};
+            font-size: {design.get("base_font_size")};
+        }}
+
+        #mainTitle {{
+            font-size: 28px;
+            font-weight: 700;
+            color: {design.get("title_color")};
+            padding: 15px 10px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid {design.get("border_color")};
+        }}
+
+        #unprocessedTitle {{
+            font-size: 18px;
+            font-weight: 600;
+            color: {design.get("unprocessed_title_color")};
+            margin-bottom: 10px;
+        }}
+
+        QPushButton {{
+            background-color: {design.get("button_background_color")};
+            color: {design.get("button_text_color")};
+            border: none;
+            padding: 12px 22px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 8px;
+            min-width: 120px;
+            transition: background-color 0.3s ease;
+        }}
+        QPushButton:hover {{
+            background-color: {design.get("button_hover_color")};
+        }}
+        QPushButton:pressed {{
+            background-color: {design.get("button_pressed_color")};
+        }}
+
+        QPushButton.page-button {{
+            background-color: {design.get("page_button_inactive_bg")};
+            color: {design.get("page_button_inactive_text")};
+            font-weight: 500;
+        }}
+
+        QPushButton.page-button:checked {{
+            background-color: {design.get("page_button_active_bg")};
+            color: {design.get("page_button_active_text")};
+            font-weight: 600;
+        }}
+
+        QComboBox, QLineEdit, QDateEdit {{
+            background-color: {design.get("input_background_color")};
+            border: 1px solid {design.get("input_border_color")};
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: {design.get("input_text_color")};
+            font-size: 14px;
+            min-height: 32px;
+        }}
+        QComboBox::drop-down, QDateEdit::drop-down {{
+            background-color: {design.get("input_background_color")} !important;
+            border: none;
+            width: 20px;
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+        }}
+
+        QComboBox::down-arrow {{
+            image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'><polygon points='0,0 10,0 5,10' fill='white'/></svg>"); /* Arrow color changed to white */
+            background-color: transparent;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {design.get("input_background_color")} !important;
+            border: 1px solid {design.get("input_border_color")};
+            selection-background-color: {design.get("table_selection_background_color")};
+            selection-color: {design.get("table_selection_color")};
+            color: {design.get("input_text_color")} !important;
+            outline: 0px;
+            border-radius: 8px;
+        }}
+
+        QComboBox QListView {{
+            background-color: {design.get("input_background_color")} !important;
+            color: {design.get("input_text_color")} !important;
+        }}
+
+        QCheckBox {{
+            color: {design.get("text_color")};
+            spacing: 8px;
+            font-size: 14px;
+        }}
+        QCheckBox::indicator {{
+            border: 1px solid {design.get("input_border_color")};
+            border-radius: 4px;
+            width: 18px;
+            height: 18px;
+            background-color: {design.get("input_background_color")};
+        }}
+        QCheckBox::indicator:hover {{
+            border: 1px solid {design.get("primary_color")};
+        }}
+        QCheckBox::indicator:checked {{
+            background-color: {design.get("primary_color")};
+            border-color: {design.get("primary_color")};
+        }}
+
+        QTableView, QTableWidget {{
+            background-color: {design.get("background_color")};
+            border: 1px solid {design.get("border_color")};
+            border-radius: 8px;
+            gridline-color: {design.get("border_color")};
+            font-size: 14px;
+            alternate-background-color: {design.get("table_alternate_row_color")};
+            selection-background-color: {design.get("table_selection_background_color")};
+            selection-color: {design.get("table_selection_color")};
+            outline: 0;
+        }}
+        QTableView::item, QTableWidget::item {{
+            padding: 10px 12px;
+            border-bottom: 1px solid {design.get("border_color")};
+            color: {design.get("text_color")};
+        }}
+        QTableView::item:selected, QTableWidget::item:selected {{
+            background-color: {design.get("table_selection_background_color")};
+            color: {design.get("table_selection_color")};
+            border: 1px solid {design.get("input_border_color")};
+        }}
+
+        QHeaderView::section {{
+            background-color: {design.get("table_header_color")};
+            padding: 12px 12px;
+            border: none;
+            border-bottom: 2px solid {design.get("table_header_color")};
+            font-size: 14px;
+            font-weight: 600;
+            color: {design.get("text_color")};
+            text-align: left;
+        }}
+        QHeaderView::section:last {{
+            border-right: none;
+        }}
+
+        QStatusBar {{
+            font-size: 13px;
+            background-color: {design.get("background_color")};
+            border-top: 1px solid {design.get("border_color")};
+            color: {design.get("text_color")};
+            padding: 5px 10px;
+        }}
+        """
+        return stylesheet
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+
+    window = MainWindow() # MainWindow のインスタンスを一度だけ作成
 
     # Create and set a light palette to override system dark mode
     from PySide6.QtGui import QPalette, QColor
     
+    design_config = window.design_config # MainWindow インスタンスから design_config を取得
+
     light_palette = QPalette()
-    light_palette.setColor(QPalette.Window, QColor("#F0F0F0"))
-    light_palette.setColor(QPalette.WindowText, Qt.black)
-    light_palette.setColor(QPalette.Base, Qt.white)
-    light_palette.setColor(QPalette.AlternateBase, QColor("#F0F0F0"))
-    light_palette.setColor(QPalette.ToolTipBase, Qt.white)
-    light_palette.setColor(QPalette.ToolTipText, Qt.black)
-    light_palette.setColor(QPalette.Text, Qt.black)
-    light_palette.setColor(QPalette.Button, QColor("#F0F0F0"))
-    light_palette.setColor(QPalette.ButtonText, Qt.black)
-    light_palette.setColor(QPalette.BrightText, Qt.red)
-    light_palette.setColor(QPalette.Link, QColor(0, 0, 255))
-    light_palette.setColor(QPalette.Highlight, QColor(0, 120, 215))
-    light_palette.setColor(QPalette.HighlightedText, Qt.white)
+    light_palette.setColor(QPalette.Window, QColor(design_config.get("background_color")))
+    light_palette.setColor(QPalette.WindowText, QColor(design_config.get("text_color")))
+    light_palette.setColor(QPalette.Base, QColor(design_config.get("input_background_color")))
+    light_palette.setColor(QPalette.AlternateBase, QColor(design_config.get("table_alternate_row_color")))
+    light_palette.setColor(QPalette.ToolTipBase, QColor(design_config.get("input_background_color")))
+    light_palette.setColor(QPalette.ToolTipText, QColor(design_config.get("text_color")))
+    light_palette.setColor(QPalette.Text, QColor(design_config.get("text_color")))
+    light_palette.setColor(QPalette.Button, QColor(design_config.get("button_background_color")))
+    light_palette.setColor(QPalette.ButtonText, QColor(design_config.get("button_text_color")))
+    light_palette.setColor(QPalette.BrightText, QColor(design_config.get("highlight_color")))
+    light_palette.setColor(QPalette.Link, QColor(design_config.get("primary_color")))
+    light_palette.setColor(QPalette.Highlight, QColor(design_config.get("table_selection_background_color")))
+    light_palette.setColor(QPalette.HighlightedText, QColor(design_config.get("table_selection_color")))
     
     # Set colors for disabled state
-    light_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(127, 127, 127))
-    light_palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(127, 127, 127))
-    light_palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(127, 127, 127))
+    light_palette.setColor(QPalette.Disabled, QPalette.Text, QColor(design_config.get("secondary_color")))
+    light_palette.setColor(QPalette.Disabled, QPalette.WindowText, QColor(design_config.get("secondary_color")))
+    light_palette.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(design_config.get("secondary_color")))
     
     app.setPalette(light_palette)
 
-    app.setStyleSheet(FINAL_STYLESHEET)
-    window = MainWindow()
+    app.setStyleSheet(window._generate_stylesheet())
     window.show()
     sys.exit(app.exec())
