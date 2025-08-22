@@ -271,6 +271,46 @@ class MainWindow(QMainWindow):
 
         top_controls_layout.addWidget(self.main_page_button)
         top_controls_layout.addWidget(self.cleaning_page_button)
+        top_controls_layout.addStretch() # ページボタンと凡例の間にスペースを追加
+
+        # 洗浄指示の凡例を追加
+        legend_widget = QWidget()
+        legend_layout = QHBoxLayout(legend_widget)
+        legend_layout.setContentsMargins(0, 0, 0, 0)
+        legend_layout.setSpacing(10)
+
+        instructions_data = [
+            ("1", "急ぎ・当日出荷（AM10：30までに洗浄）"),
+            ("2", "近日中に出荷（AM中に洗浄）"),
+            ("3", "通常品(当日中に洗浄）"),
+            ("4", "サビ注意品・別途指示品"),
+        ]
+
+        colors_config = self.config.get("colors", {})
+
+        for num, desc in instructions_data:
+            color_hex = colors_config.get(f"instruction_{num}", "#FFFFFF") # configから色を取得
+
+            item_container = QWidget()
+            item_layout = QHBoxLayout(item_container)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(5)
+
+            color_swatch = QLabel()
+            color_swatch.setFixedSize(15, 15) # 色見本のサイズ
+            color_swatch.setStyleSheet(f"background-color: {color_hex}; border: 1px solid #CED4DA; border-radius: 3px;")
+
+            description_label = QLabel(desc)
+            description_label.setStyleSheet("font-size: 12px; color: #495057;") # 説明文のスタイル
+
+            item_layout.addWidget(color_swatch)
+            item_layout.addWidget(description_label)
+
+            legend_layout.addWidget(item_container)
+        
+        legend_layout.addStretch() # 凡例の項目を左寄せにする
+        top_controls_layout.addWidget(legend_widget)
+
         top_controls_layout.addStretch() # 右端に寄せるため
 
         # --- ページスタック ---
