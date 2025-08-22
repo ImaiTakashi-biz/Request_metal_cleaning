@@ -1,5 +1,5 @@
 from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QStyledItemDelegate, QComboBox
 import datetime
 import collections
@@ -174,6 +174,12 @@ class MainTableModel(BaseTableModel):
             if col_name == "前日セット":
                 return Qt.Checked if self._is_set_logically(row_data) else Qt.Unchecked
         
+        if role == Qt.FontRole:
+            if col_name == 'machine_no':
+                font = QFont()
+                font.setBold(True)
+                return font
+
         if role == Qt.BackgroundRole:
             if col_name == 'machine_no':
                 instruction = str(row_data.get("cleaning_instruction", ""))
@@ -181,7 +187,6 @@ class MainTableModel(BaseTableModel):
                 color_key = f"instruction_{instruction}"
                 if color_key in color_map:
                     color = QColor(color_map[color_key])
-                    color.setAlpha(100)
                     return color
             if col_name == "前日セット":
                 set_color = self._get_set_checkbox_color(row_data)
@@ -254,6 +259,12 @@ class CleaningInstructionTableModel(BaseTableModel):
             if col_name in ["set_date", "completion_date"] and value:
                 return str(value).split(' ')[0]
             return value
+
+        if role == Qt.FontRole:
+            if col_name == 'machine_no':
+                font = QFont()
+                font.setBold(True)
+                return font
         
         if role == Qt.BackgroundRole:
             # 優先度1: 機番の背景色（洗浄指示）
@@ -263,7 +274,6 @@ class CleaningInstructionTableModel(BaseTableModel):
                 color_key = f"instruction_{instruction}"
                 if color_key in color_map:
                     color = QColor(color_map[color_key])
-                    color.setAlpha(150) # 透明度を少し調整
                     return color
 
             # 優先度2: 材質識別の背景色
