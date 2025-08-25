@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
 
         # --- シグナルとスロットの接続 ---
         self.page_button_group.idClicked.connect(self.pages_stack.setCurrentIndex)
+        self.page_button_group.idClicked.connect(self.toggle_unprocessed_widget_visibility)
         self.date_edit.dateChanged.connect(self.load_data_for_selected_date)
         self.copy_instructions_button.clicked.connect(self.handle_copy_instructions)
         
@@ -220,8 +221,8 @@ class MainWindow(QMainWindow):
         self.pages_stack.addWidget(cleaning_page_widget)
 
         # --- 未払い出し機番テーブル ---
-        unprocessed_widget = QWidget()
-        unprocessed_layout = QHBoxLayout(unprocessed_widget) # Changed to QHBoxLayout
+        self.unprocessed_widget = QWidget()
+        unprocessed_layout = QHBoxLayout(self.unprocessed_widget) # Changed to QHBoxLayout
 
         # 製造未払い出し機番テーブル (左側)
         manufacturing_unprocessed_container = QWidget()
@@ -271,7 +272,7 @@ class MainWindow(QMainWindow):
         # --- 全体レイアウト ---
         main_layout.addLayout(top_controls_layout)
         main_layout.addWidget(self.pages_stack)
-        main_layout.addWidget(unprocessed_widget)
+        main_layout.addWidget(self.unprocessed_widget)
 
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
@@ -410,6 +411,12 @@ class MainWindow(QMainWindow):
             sender_view.edit(index)
         elif isinstance(model, CleaningInstructionTableModel) and col_name == "cleaning_instruction":
             sender_view.edit(index)
+
+    @Slot(int)
+    def toggle_unprocessed_widget_visibility(self, page_id):
+        # page_id 0: Main, 1: 洗浄指示管理
+        is_visible = (page_id == 0)
+        self.unprocessed_widget.setVisible(is_visible)
 
     @Slot()
     def refresh_unprocessed_list_from_model(self):
