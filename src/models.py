@@ -108,10 +108,7 @@ class BaseTableModel(QAbstractTableModel):
         try:
             set_date = datetime.date.fromisoformat(str(set_date_str).split(' ')[0])
             acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
-            weekday = acquisition_date.weekday()
-            if weekday == 6: delta = datetime.timedelta(days=2)
-            elif weekday == 0: delta = datetime.timedelta(days=3)
-            else: delta = datetime.timedelta(days=1)
+            delta = datetime.timedelta(days=1)
             logical_yesterday = acquisition_date - delta
             return set_date == logical_yesterday
         except (ValueError, TypeError): return False
