@@ -135,6 +135,19 @@ class MainTableModel(BaseTableModel):
             "notes": "備考",
         }
 
+    def _is_set_yesterday(self, row_data):
+        set_date_str = row_data.get("set_date")
+        acquisition_date_str = row_data.get("acquisition_date")
+        if not set_date_str or not acquisition_date_str:
+            return False
+        try:
+            set_date = datetime.date.fromisoformat(str(set_date_str).split(' ')[0])
+            acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
+            yesterday = acquisition_date - datetime.timedelta(days=1)
+            return set_date == yesterday
+        except (ValueError, TypeError):
+            return False
+
     def data(self, index, role=Qt.DisplayRole):
         if not index.isValid(): return None
         row_data = self._data[index.row()]
@@ -163,6 +176,22 @@ class MainTableModel(BaseTableModel):
                 if color_key in color_map:
                     color = QColor(color_map[color_key])
                     return color
+            
+            if col_name == 'previous_day_set':
+                if self._is_set_yesterday(row_data):
+                    completion_date_str = row_data.get("completion_date")
+                    acquisition_date_str = row_data.get("acquisition_date")
+                    colors = self._config.get("colors", {})
+                    try:
+                        acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
+                        if completion_date_str:
+                            completion_date = datetime.date.fromisoformat(str(completion_date_str).split(' ')[0])
+                            if completion_date == acquisition_date:
+                                return QColor(colors.get("set_bg_today", "#0000FF"))  # 青
+                    except (ValueError, TypeError):
+                        pass
+                    return QColor(colors.get("set_bg_other_day", "#FFFF00"))  # 黄色
+
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
