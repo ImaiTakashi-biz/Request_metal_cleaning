@@ -4,25 +4,6 @@ from PySide6.QtWidgets import QStyledItemDelegate, QComboBox
 import datetime
 import collections
 
-class ComboBoxDelegate(QStyledItemDelegate):
-    """QComboBoxをテーブルセル内に表示するためのデリゲート"""
-    def __init__(self, parent=None, items=None):
-        super().__init__(parent)
-        self.items = items or []
-
-    def createEditor(self, parent, option, index):
-        editor = QComboBox(parent)
-        editor.addItems(self.items)
-        return editor
-
-    def setEditorData(self, editor, index):
-        value = index.model().data(index, Qt.EditRole)
-        if value in self.items:
-            editor.setCurrentText(str(value))
-
-    def setModelData(self, editor, model, index):
-        model.setData(index, editor.currentText(), Qt.EditRole)
-
 class EditableComboBoxDelegate(QStyledItemDelegate):
     """編集可能なQComboBoxをテーブルセル内に表示するためのデリゲート"""
     def __init__(self, parent=None, items=None):
@@ -74,7 +55,6 @@ class BaseTableModel(QAbstractTableModel):
         self._config = config or {}
         self._headers = []
         self._display_headers = {}
-        self._hidden_fields = ["set_date", "completion_date", "id", "acquisition_date", "quantity", "material_id"]
 
     def rowCount(self, parent=QModelIndex()):
         return len(self._data)
