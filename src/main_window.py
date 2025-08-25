@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         # Mainページの固定幅カラム
         main_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right]
         fixed_width_columns = {
-            "part_number": 95, "product_name": 95, "customer_name": 95, "remarks": 85,
+            "part_number": 95, "product_name": 95, "customer_name": 95, "notes": 85,
         }
         for col_name, width in fixed_width_columns.items():
             try:
@@ -310,8 +310,8 @@ class MainWindow(QMainWindow):
 
     def setup_delegates(self):
         try:
-            col_index = self.main_models['left']._headers.index("remarks")
-            items = self.config.get("remarks_options", ["出荷無し", "1st外観"])
+            col_index = self.main_models['left']._headers.index("notes")
+            items = self.config.get("notes_options", self.config.get("remarks_options", ["出荷無し", "1st外観"]))
             delegate = EditableComboBoxDelegate(items=items, parent=self)
             self.main_table_view_left.setItemDelegateForColumn(col_index, delegate)
             self.main_table_view_center.setItemDelegateForColumn(col_index, delegate)
@@ -340,7 +340,7 @@ class MainWindow(QMainWindow):
         model = sender_view.model()
         col_name = model._headers[index.column()]
 
-        if isinstance(model, MainTableModel) and col_name == "remarks":
+        if isinstance(model, MainTableModel) and col_name == "notes":
             sender_view.edit(index)
         elif isinstance(model, CleaningInstructionTableModel) and col_name == "cleaning_instruction":
             sender_view.edit(index)

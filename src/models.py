@@ -115,24 +115,24 @@ class MainTableModel(BaseTableModel):
     def __init__(self, data=None, config=None, parent=None):
         super().__init__(data, config, parent)
         self._headers = [
-            "machine_no", 
-            "manufacturing_check", 
-            "cleaning_check", 
-            "前日セット",
-            "part_number", 
-            "product_name", 
-            "customer_name", 
-            "remarks",
+            "machine_no",
+            "manufacturing_check",
+            "cleaning_check",
+            "previous_day_set",
+            "part_number",
+            "product_name",
+            "customer_name",
+            "notes",
         ]
         self._display_headers = {
             "machine_no": "機番",
             "manufacturing_check": "製造",
             "cleaning_check": "洗浄",
-            "前日セット": "セット",
+            "previous_day_set": "セット",
             "part_number": "品番",
             "product_name": "品名",
             "customer_name": "客先名",
-            "remarks": "備考",
+            "notes": "備考",
         }
 
     def data(self, index, role=Qt.DisplayRole):
@@ -141,16 +141,14 @@ class MainTableModel(BaseTableModel):
         col_name = self._headers[index.column()]
 
         if role == Qt.DisplayRole or role == Qt.EditRole:
-            if col_name in ["manufacturing_check", "cleaning_check", "前日セット"]:
+            if col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
                 return None
             return row_data.get(col_name, "")
 
         if role == Qt.CheckStateRole:
-            if col_name in ["manufacturing_check", "cleaning_check"]:
+            if col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
                 return Qt.Checked if bool(row_data.get(col_name)) else Qt.Unchecked
-            if col_name == "前日セット":
-                return Qt.Checked if self._is_set_logically(row_data) else Qt.Unchecked
-        
+
         if role == Qt.FontRole:
             if col_name == 'machine_no':
                 font = QFont()
@@ -165,10 +163,6 @@ class MainTableModel(BaseTableModel):
                 if color_key in color_map:
                     color = QColor(color_map[color_key])
                     return color
-            if col_name == "前日セット":
-                set_color = self._get_set_checkbox_color(row_data)
-                if set_color:
-                    return set_color
         return None
 
     def setData(self, index, value, role=Qt.EditRole):
@@ -178,16 +172,18 @@ class MainTableModel(BaseTableModel):
         record_id = self._data[row].get("id")
         if record_id is None: return False
 
-        if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check"]:
+        if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
             new_value = bool(value)
             self._data[row][col_name] = new_value
             self.db_update_signal.emit(record_id, col_name, new_value)
             self.dataChanged.emit(index, index, [role])
-            self.data_changed_for_unprocessed_list.emit()
+            if col_name in ["manufacturing_check", "cleaning_check"]:
+                self.data_changed_for_unprocessed_list.emit()
             return True
-        
-        if role == Qt.EditRole and col_name == "remarks":
+
+        if role == Qt.EditRole and col_name == "notes":
             self._data[row][col_name] = value
+            self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
             return True
 
@@ -197,9 +193,9 @@ class MainTableModel(BaseTableModel):
         base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
         if not index.isValid(): return base_flags
         col_name = self._headers[index.column()]
-        if col_name in ["manufacturing_check", "cleaning_check"]:
+        if col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
             return base_flags | Qt.ItemIsUserCheckable
-        elif col_name == "remarks":
+        elif col_name == "notes":
             return base_flags | Qt.ItemIsEditable
         return base_flags
 
