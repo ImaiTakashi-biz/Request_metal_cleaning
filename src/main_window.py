@@ -7,11 +7,11 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup, QSizePolicy, QScrollArea,
     QStyle
 )
-from PySide6.QtCore import QDate, Slot, Qt, QModelIndex
+from PySide6.QtCore import QDate, Slot, Qt, QModelIndex, QTimer
 
 from config import load_config
 from database import DatabaseHandler
-from models import MainTableModel, CleaningInstructionTableModel, EditableComboBoxDelegate, UnprocessedMachineNumbersTableModel
+from models import MainTableModel, CleaningInstructionTableModel, EditableComboBoxDelegate, UnprocessedMachineNumbersTableModel, CleaningInstructionDelegate
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -41,10 +41,9 @@ class MainWindow(QMainWindow):
         self.main_table_view_center.setModel(self.main_models['center'])
         self.main_table_view_right.setModel(self.main_models['right'])
 
-        self.cleaning_model_left = CleaningInstructionTableModel(config=self.config)
-        self.cleaning_table_view_left.setModel(self.cleaning_model_left)
-        self.cleaning_model_right = CleaningInstructionTableModel(config=self.config)
-        self.cleaning_table_view_right.setModel(self.cleaning_model_right)
+        # 洗浄指示管理ページ用の単一モデル
+        self.cleaning_model = CleaningInstructionTableModel(config=self.config)
+        self.cleaning_table_view.setModel(self.cleaning_model)
 
         self.manufacturing_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='manufacturing_check', config=self.config)
         self.manufacturing_unprocessed_table_view.setModel(self.manufacturing_unprocessed_model)
@@ -52,8 +51,8 @@ class MainWindow(QMainWindow):
         self.cleaning_unprocessed_model = UnprocessedMachineNumbersTableModel(check_column='cleaning_check', config=self.config)
         self.cleaning_unprocessed_table_view.setModel(self.cleaning_unprocessed_model)
         
-        self.all_models = list(self.main_models.values()) + [self.cleaning_model_left, self.cleaning_model_right]
-        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view_left, self.cleaning_table_view_right, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
+        self.all_models = list(self.main_models.values()) + [self.cleaning_model]
+        self.all_table_views = [self.main_table_view_left, self.main_table_view_center, self.main_table_view_right, self.cleaning_table_view, self.manufacturing_unprocessed_table_view, self.cleaning_unprocessed_table_view]
 
         for view in self.all_table_views:
             view.setAlternatingRowColors(True);
@@ -192,14 +191,11 @@ class MainWindow(QMainWindow):
         copy_layout.addWidget(self.copy_instructions_button)
         copy_layout.addStretch()
         cleaning_page_layout.addWidget(copy_widget)
-        cleaning_tables_layout = QHBoxLayout()
-        self.cleaning_table_view_left = QTableView()
-        self.cleaning_table_view_left.setObjectName("cleaning_table_view_left")
-        self.cleaning_table_view_right = QTableView()
-        self.cleaning_table_view_right.setObjectName("cleaning_table_view_right")
-        cleaning_tables_layout.addWidget(self.cleaning_table_view_left)
-        cleaning_tables_layout.addWidget(self.cleaning_table_view_right)
-        cleaning_page_layout.addLayout(cleaning_tables_layout)
+        
+        # 一括表示用の単一テーブルビュー
+        self.cleaning_table_view = QTableView()
+        self.cleaning_table_view.setObjectName("cleaning_table_view")
+        cleaning_page_layout.addWidget(self.cleaning_table_view)
         self.pages_stack.addWidget(cleaning_page_widget)
 
         # --- 未払い出し機番テーブル ---
@@ -269,14 +265,21 @@ class MainWindow(QMainWindow):
                 view.horizontalHeader().setFixedHeight(30)
                 continue
 
-            for i in range(model.columnCount()):
-                header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+            # 洗浄指示管理ページは特別な列幅設定
+            if view == self.cleaning_table_view:
+                # 最初はすべてコンテンツサイズに設定
+                for i in range(model.columnCount()):
+                    header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+            else:
+                # その他のテーブルはコンテンツサイズに合わせる
+                for i in range(model.columnCount()):
+                    header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
         # ヘッダーに強調色を設定
         emphasized_header_color = self.design_config.get("highlight_color", "#00BFFF")
         views_for_emphasized_header = [
             self.main_table_view_left, self.main_table_view_center, self.main_table_view_right,
-            self.cleaning_table_view_left, self.cleaning_table_view_right
+            self.cleaning_table_view
         ]
         for view in views_for_emphasized_header:
             view.horizontalHeader().setStyleSheet(f"QHeaderView::section {{ background-color: {emphasized_header_color}; }}")
@@ -294,19 +297,37 @@ class MainWindow(QMainWindow):
                     view.setColumnWidth(col_index, width)
             except ValueError: pass
 
-        # 洗浄指示管理ページの固定幅カラム
-        cleaning_views = [self.cleaning_table_view_left, self.cleaning_table_view_right]
-        fixed_width_cleaning_columns = {
-            "customer_name": 95, "part_number": 95, "product_name": 95, "next_process": 150,
-            "material_id": 35, "set_date": 70, "completion_date": 70, "notes": 85,
-        }
-        for col_name, width in fixed_width_cleaning_columns.items():
-            try:
-                col_index = self.cleaning_model_left._headers.index(col_name)
-                for view in cleaning_views:
-                    view.horizontalHeader().setSectionResizeMode(col_index, QHeaderView.Fixed)
-                    view.setColumnWidth(col_index, width)
-            except ValueError: pass
+        # 洗浄指示管理ページの列幅設定（余裕を持たせた幅）
+        if hasattr(self, 'cleaning_model') and self.cleaning_model:
+            cleaning_column_widths = {
+                "set_date": 90,           # セット予定日
+                "machine_no": 80,         # 機番  
+                "customer_name": 120,     # 客先名
+                "part_number": 120,       # 品番
+                "product_name": 140,      # 製品名
+                "next_process": 100,      # 次工程
+                "quantity": 70,           # 数量
+                "completion_date": 90,    # 加工終了日
+                "material_id": 50,        # 識別
+                "cleaning_instruction": 80, # 洗浄指示
+                "notes": 85,              # 備考（Mainページと同じ固定幅）
+            }
+            
+            for col_name, width in cleaning_column_widths.items():
+                try:
+                    col_index = self.cleaning_model._headers.index(col_name)
+                    if col_name == "notes":
+                        # 備考カラムは固定幅
+                        self.cleaning_table_view.horizontalHeader().setSectionResizeMode(col_index, QHeaderView.Fixed)
+                        self.cleaning_table_view.setColumnWidth(col_index, width)
+                    else:
+                        # その他のカラムは最小幅を設定して見やすくする
+                        self.cleaning_table_view.horizontalHeader().setSectionResizeMode(col_index, QHeaderView.ResizeToContents)
+                        self.cleaning_table_view.setColumnWidth(col_index, width)
+                        # 最小幅も設定
+                        self.cleaning_table_view.horizontalHeader().setMinimumSectionSize(width)
+                except ValueError: 
+                    pass
 
     def setup_delegates(self):
         try:
@@ -318,22 +339,61 @@ class MainWindow(QMainWindow):
             self.main_table_view_right.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
+        # 洗浄指示管理ページの洗浄指示カラム用デリゲート（ドロップダウン廃止・直接入力）
         try:
-            col_index = self.cleaning_model_left._headers.index("cleaning_instruction")
-            items = ["", "1", "2", "3", "4"]
-            delegate = EditableComboBoxDelegate(items=items, parent=self.cleaning_table_view_left)
-            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
-            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
+            col_index = self.cleaning_model._headers.index("cleaning_instruction")
+            
+            # 自動移動フラグを初期化
+            self.cleaning_table_view.auto_move_enabled = True
+            
+            # カスタムテーブルビュー機能を追加
+            self.cleaning_table_view.move_to_next_cell = self.create_move_to_next_cell_function(self.cleaning_table_view)
+            
+            delegate = CleaningInstructionDelegate(table_view=self.cleaning_table_view, parent=self.cleaning_table_view)
+            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
         # 洗浄指示管理ページの備考カラム用デリゲート
         try:
-            col_index = self.cleaning_model_left._headers.index("notes")
+            col_index = self.cleaning_model._headers.index("notes")
             items = self.config.get("notes_options", self.config.get("remarks_options", ["出荷無し", "1st外観"]))
             delegate = EditableComboBoxDelegate(items=items, parent=self)
-            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
-            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
+            self.cleaning_table_view.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
+
+    def create_move_to_next_cell_function(self, table_view):
+        """テーブルビュー用の次のセルへ移動する関数を作成"""
+        def move_to_next_cell(current_index):
+            if not current_index.isValid():
+                return
+            
+            # 自動移動が無効化されている場合は何もしない
+            if hasattr(table_view, 'auto_move_enabled') and not table_view.auto_move_enabled:
+                return
+                
+            model = table_view.model()
+            current_row = current_index.row()
+            current_col = current_index.column()
+            
+            # 洗浄指示カラムのインデックスを取得
+            try:
+                cleaning_instruction_col = model._headers.index("cleaning_instruction")
+            except (ValueError, AttributeError):
+                return
+            
+            # 洗浄指示カラムでの編集の場合のみ移動
+            if current_col == cleaning_instruction_col:
+                next_row = current_row + 1
+                
+                # 次の行が存在する場合
+                if next_row < model.rowCount():
+                    next_index = model.index(next_row, current_col)
+                    table_view.setCurrentIndex(next_index)
+                    table_view.scrollTo(next_index)
+                    # 少し遅れてから編集状態にする
+                    QTimer.singleShot(100, lambda: table_view.edit(next_index))
+        
+        return move_to_next_cell
 
     def _adjust_table_height(self, table_view):
         header_height = table_view.horizontalHeader().height()
@@ -349,9 +409,26 @@ class MainWindow(QMainWindow):
         model = sender_view.model()
         col_name = model._headers[index.column()]
 
-        if isinstance(model, MainTableModel) and col_name == "notes":
-            sender_view.edit(index)
-        elif isinstance(model, CleaningInstructionTableModel) and col_name in ["cleaning_instruction", "notes"]:
+        # 洗浄指示管理ページでのクリック処理
+        if isinstance(model, CleaningInstructionTableModel):
+            # 洗浄指示カラム以外がクリックされた場合、自動移動を無効化
+            try:
+                cleaning_instruction_col = model._headers.index("cleaning_instruction")
+                if index.column() != cleaning_instruction_col:
+                    # 自動移動フラグを無効化
+                    if hasattr(sender_view, 'auto_move_enabled'):
+                        sender_view.auto_move_enabled = False
+                else:
+                    # 洗浄指示カラムがクリックされた場合、自動移動を有効化
+                    if hasattr(sender_view, 'auto_move_enabled'):
+                        sender_view.auto_move_enabled = True
+            except ValueError:
+                pass
+            
+            # 編集可能なカラムの場合、編集開始
+            if col_name in ["cleaning_instruction", "notes"]:
+                sender_view.edit(index)
+        elif isinstance(model, MainTableModel) and col_name == "notes":
             sender_view.edit(index)
 
     @Slot(int)
@@ -388,12 +465,8 @@ class MainWindow(QMainWindow):
             self.main_models['center'].load_data(data[20:40])
             self.main_models['right'].load_data(data[40:])
 
-            left_machine_numbers = ['A', 'B', 'C', 'D']
-            right_machine_numbers = ['E', 'F']
-            filtered_data_left = [item for item in data if item.get('machine_no') and item['machine_no'][0] in left_machine_numbers]
-            filtered_data_right = [item for item in data if item.get('machine_no') and item['machine_no'][0] in right_machine_numbers]
-            self.cleaning_model_left.load_data(filtered_data_left)
-            self.cleaning_model_right.load_data(filtered_data_right)
+            # 洗浄指示管理ページは全データを一括表示
+            self.cleaning_model.load_data(data)
 
             self.manufacturing_unprocessed_model.load_data(data)
             self.cleaning_unprocessed_model.load_data(data)
@@ -408,6 +481,19 @@ class MainWindow(QMainWindow):
 
             self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
             self.cleaning_unprocessed_table_view.resizeColumnsToContents()
+            
+            # 洗浄指示管理ページのテーブル列幅を再調整
+            if hasattr(self, 'cleaning_table_view'):
+                # データ読み込み後に列幅を再設定
+                self.cleaning_table_view.resizeColumnsToContents()
+                
+                # 備考カラムのみ固定幅に再設定
+                try:
+                    notes_col_index = self.cleaning_model._headers.index("notes")
+                    self.cleaning_table_view.horizontalHeader().setSectionResizeMode(notes_col_index, QHeaderView.Fixed)
+                    self.cleaning_table_view.setColumnWidth(notes_col_index, 85)
+                except (ValueError, AttributeError):
+                    pass
 
     @Slot()
     def handle_copy_instructions(self):

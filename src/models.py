@@ -1,6 +1,6 @@
-from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal
-from PySide6.QtGui import QColor, QFont
-from PySide6.QtWidgets import QStyledItemDelegate, QComboBox
+from PySide6.QtCore import QAbstractTableModel, Qt, QModelIndex, Signal, QTimer
+from PySide6.QtGui import QColor, QFont, QKeyEvent
+from PySide6.QtWidgets import QStyledItemDelegate, QComboBox, QLineEdit
 import datetime
 import collections
 
@@ -43,6 +43,69 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
         text_value = editor.currentText()
         model.setData(index, text_value, Qt.EditRole)
         self.commitData.emit(editor)
+
+class CleaningInstructionDelegate(QStyledItemDelegate):
+    """洗浄指示用のカスタムデリゲート（直接入力・下のセルへの自動移動機能付き）"""
+    
+    def __init__(self, parent=None, table_view=None):
+        super().__init__(parent)
+        self.table_view = table_view
+        
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                color: black;
+                border: 1px solid #CED4DA;
+                padding: 4px;
+            }
+        """)
+        # 編集開始時に自動移動を有効化
+        if self.table_view and hasattr(self.table_view, 'auto_move_enabled'):
+            self.table_view.auto_move_enabled = True
+        return editor
+        
+    def setEditorData(self, editor, index):
+        value = index.model().data(index, Qt.EditRole)
+        editor.setText(str(value) if value else "")
+        editor.selectAll()  # 既存テキストを選択状態にする
+        
+    def setModelData(self, editor, model, index):
+        text_value = editor.text().strip()
+        # 入力値の検証（1-4の数値または空文字のみ許可）
+        if text_value == "" or text_value in ["1", "2", "3", "4"]:
+            model.setData(index, text_value, Qt.EditRole)
+            self.commitData.emit(editor)
+            
+            # 自動移動が有効で、洗浄指示カラムでの編集の場合のみ移動
+            if (self.table_view and 
+                hasattr(self.table_view, 'move_to_next_cell') and 
+                hasattr(self.table_view, 'auto_move_enabled') and 
+                self.table_view.auto_move_enabled):
+                
+                # 洗浄指示カラムかどうか確認
+                try:
+                    cleaning_instruction_col = model._headers.index("cleaning_instruction")
+                    if index.column() == cleaning_instruction_col:
+                        QTimer.singleShot(50, lambda: self.table_view.move_to_next_cell(index))
+                except (ValueError, AttributeError):
+                    pass
+                
+    def eventFilter(self, editor, event):
+        if isinstance(event, QKeyEvent) and event.type() == QKeyEvent.KeyPress:
+            key = event.key()
+            text = event.text()
+            
+            # 数字キー1-4または削除系キーのみ許可
+            if text.isdigit() and text in "1234":
+                return super().eventFilter(editor, event)
+            elif key in (Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Escape):
+                return super().eventFilter(editor, event)
+            else:
+                return True  # その他のキーはブロック
+                
+        return super().eventFilter(editor, event)
 
 class BaseTableModel(QAbstractTableModel):
     """モデルの共通ロジックを持つベースクラス"""
