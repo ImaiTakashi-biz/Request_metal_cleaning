@@ -234,7 +234,7 @@ class CleaningInstructionTableModel(BaseTableModel):
         super().__init__(data, config, parent)
         self._headers = [
             "set_date", "machine_no", "customer_name", "part_number", 
-            "product_name", "next_process", "quantity", "completion_date", "material_id", "cleaning_instruction"
+            "product_name", "next_process", "quantity", "completion_date", "material_id", "cleaning_instruction", "notes"
         ]
         self._display_headers = {
             "set_date": "セット予定日",
@@ -247,6 +247,7 @@ class CleaningInstructionTableModel(BaseTableModel):
             "completion_date": "加工終了日",
             "material_id": "識別",
             "cleaning_instruction": "洗浄指示",
+            "notes": "備考",
         }
 
     def data(self, index, role=Qt.DisplayRole):
@@ -297,11 +298,12 @@ class CleaningInstructionTableModel(BaseTableModel):
         record_id = self._data[row].get("id")
         if record_id is None: return False
 
-        if col_name == "cleaning_instruction":
+        if col_name in ["cleaning_instruction", "notes"]:
             self._data[row][col_name] = value
             self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
-            self.data_changed_for_unprocessed_list.emit()
+            if col_name == "cleaning_instruction":
+                self.data_changed_for_unprocessed_list.emit()
             return True
         return False
 
@@ -309,7 +311,7 @@ class CleaningInstructionTableModel(BaseTableModel):
         base_flags = Qt.ItemIsSelectable | Qt.ItemIsEnabled
         if not index.isValid(): return base_flags
         col_name = self._headers[index.column()]
-        if col_name == "cleaning_instruction":
+        if col_name in ["cleaning_instruction", "notes"]:
             return base_flags | Qt.ItemIsEditable
         return base_flags
 

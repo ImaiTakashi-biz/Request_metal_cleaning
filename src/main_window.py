@@ -298,7 +298,7 @@ class MainWindow(QMainWindow):
         cleaning_views = [self.cleaning_table_view_left, self.cleaning_table_view_right]
         fixed_width_cleaning_columns = {
             "customer_name": 95, "part_number": 95, "product_name": 95, "next_process": 150,
-            "material_id": 35, "set_date": 70, "completion_date": 70,
+            "material_id": 35, "set_date": 70, "completion_date": 70, "notes": 85,
         }
         for col_name, width in fixed_width_cleaning_columns.items():
             try:
@@ -326,6 +326,15 @@ class MainWindow(QMainWindow):
             self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
         except ValueError: pass
 
+        # 洗浄指示管理ページの備考カラム用デリゲート
+        try:
+            col_index = self.cleaning_model_left._headers.index("notes")
+            items = self.config.get("notes_options", self.config.get("remarks_options", ["出荷無し", "1st外観"]))
+            delegate = EditableComboBoxDelegate(items=items, parent=self)
+            self.cleaning_table_view_left.setItemDelegateForColumn(col_index, delegate)
+            self.cleaning_table_view_right.setItemDelegateForColumn(col_index, delegate)
+        except ValueError: pass
+
     def _adjust_table_height(self, table_view):
         header_height = table_view.horizontalHeader().height()
         rows_height = sum(table_view.rowHeight(i) for i in range(table_view.model().rowCount()))
@@ -342,7 +351,7 @@ class MainWindow(QMainWindow):
 
         if isinstance(model, MainTableModel) and col_name == "notes":
             sender_view.edit(index)
-        elif isinstance(model, CleaningInstructionTableModel) and col_name == "cleaning_instruction":
+        elif isinstance(model, CleaningInstructionTableModel) and col_name in ["cleaning_instruction", "notes"]:
             sender_view.edit(index)
 
     @Slot(int)
