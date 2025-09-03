@@ -1,4 +1,5 @@
 import sqlite3
+import sqlite3
 import os
 
 class DatabaseHandler:
@@ -113,4 +114,26 @@ class DatabaseHandler:
         except sqlite3.Error as e:
             self.conn.rollback()
             return False, f"データベースの更新に失敗: {e}"
+
+    def get_record_value(self, record_id, column):
+        """
+        指定されたレコードの特定カラムの現在値を取得（Undo/Redo履歴用）
+        :param record_id: レコードID
+        :param column: カラム名
+        :return: 現在の値（取得失敗時はNone）
+        """
+        if not self.conn:
+            return None
+        
+        query = f"SELECT {column} FROM production_plan WHERE id = ?"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(query, (record_id,))
+            row = cursor.fetchone()
+            if row:
+                return row[column]
+            return None
+        except sqlite3.Error as e:
+            print(f"Failed to get record value: {e}")
+            return None
 

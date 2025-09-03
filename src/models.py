@@ -225,7 +225,16 @@ class MainTableModel(BaseTableModel):
 
         if role == Qt.CheckStateRole:
             if col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
-                return Qt.Checked if bool(row_data.get(col_name)) else Qt.Unchecked
+                # セットカラムの場合、カラーリング設定条件（セット日が昨日）でも自動的にTRUEに設定
+                if col_name == "previous_day_set":
+                    # データベース値をチェックし、カラーリング条件が満たされた場合は自動的にTRUE
+                    stored_value = bool(row_data.get(col_name))
+                    if self._is_set_yesterday(row_data):
+                        return Qt.Checked
+                    else:
+                        return Qt.Checked if stored_value else Qt.Unchecked
+                else:
+                    return Qt.Checked if bool(row_data.get(col_name)) else Qt.Unchecked
 
         if role == Qt.FontRole:
             if col_name == 'machine_no':

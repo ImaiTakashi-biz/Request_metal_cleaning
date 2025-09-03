@@ -1,4 +1,5 @@
 import sys
+import sys
 import collections
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import (
     QStyle
 )
 from PySide6.QtCore import QDate, Slot, Qt, QModelIndex, QTimer
+from PySide6.QtGui import QShortcut, QKeySequence
 
 from config import load_config
 from database import DatabaseHandler
@@ -28,6 +30,11 @@ class MainWindow(QMainWindow):
         self.design_config = self.config.get("design", {})
 
         self.db_handler = DatabaseHandler(self.config['database']['path'])
+
+        # Undo/Redo履歴管理
+        self.operation_history = []  # [(record_id, column, old_value, new_value), ...]
+        self.undo_stack_pointer = 0  # 現在の位置
+        self.max_history_size = 50   # 最大履歴サイズ
 
         self.setup_ui()
 
@@ -74,6 +81,9 @@ class MainWindow(QMainWindow):
 
         for view in self.all_table_views:
             view.clicked.connect(self.handle_table_click)
+
+        # Undo/Redoショートカットキーの設定
+        self.setup_shortcuts()
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -395,6 +405,91 @@ class MainWindow(QMainWindow):
         
         return move_to_next_cell
 
+    def setup_shortcuts(self):
+        """ショートカットキーの設定"""
+        # Ctrl+Z: Undo
+        self.undo_shortcut = QShortcut(QKeySequence.Undo, self)
+        self.undo_shortcut.activated.connect(self.perform_undo)
+        
+        # Ctrl+Y: Redo
+        self.redo_shortcut = QShortcut(QKeySequence.Redo, self)
+        self.redo_shortcut.activated.connect(self.perform_redo)
+
+    def add_to_history(self, record_id, column, old_value, new_value):
+        """操作履歴を追加"""
+        # 現在のポインタ以降の履歴を削除（新しい操作で上書き）
+        self.operation_history = self.operation_history[:self.undo_stack_pointer]
+        
+        # 新しい操作を追加
+        operation = {
+            'record_id': record_id,
+            'column': column,
+            'old_value': old_value,
+            'new_value': new_value
+        }
+        self.operation_history.append(operation)
+        
+        # 最大サイズを超えた場合、古い履歴を削除
+        if len(self.operation_history) > self.max_history_size:
+            self.operation_history.pop(0)
+        else:
+            self.undo_stack_pointer += 1
+        
+        # ポインタを現在の位置に設定
+        self.undo_stack_pointer = len(self.operation_history)
+
+    @Slot()
+    def perform_undo(self):
+        """元に戻す操作（Ctrl+Z）"""
+        if self.undo_stack_pointer <= 0:
+            self.status_label.setText("元に戻せる操作がありません")
+            return
+        
+        # ポインタを前に移動
+        self.undo_stack_pointer -= 1
+        operation = self.operation_history[self.undo_stack_pointer]
+        
+        # 元の値に戻す
+        success = self.db_handler.update_record(
+            operation['record_id'], 
+            operation['column'], 
+            operation['old_value']
+        )
+        
+        if success:
+            # UIを更新
+            self.load_data_for_selected_date()
+            self.status_label.setText(f"操作を元に戻しました: {operation['column']}")
+        else:
+            self.status_label.setText("元に戻す操作に失敗しました")
+            # 失敗した場合はポインタを戻す
+            self.undo_stack_pointer += 1
+
+    @Slot()
+    def perform_redo(self):
+        """やり直し操作（Ctrl+Y）"""
+        if self.undo_stack_pointer >= len(self.operation_history):
+            self.status_label.setText("やり直せる操作がありません")
+            return
+        
+        operation = self.operation_history[self.undo_stack_pointer]
+        
+        # 新しい値に戻す
+        success = self.db_handler.update_record(
+            operation['record_id'], 
+            operation['column'], 
+            operation['new_value']
+        )
+        
+        if success:
+            # ポインタを次に移動
+            self.undo_stack_pointer += 1
+            # UIを更新
+            self.load_data_for_selected_date()
+            self.status_label.setText(f"操作をやり直しました: {operation['column']}")
+        else:
+            self.status_label.setText("やり直し操作に失敗しました")
+
     def _adjust_table_height(self, table_view):
         header_height = table_view.horizontalHeader().height()
         rows_height = sum(table_view.rowHeight(i) for i in range(table_view.model().rowCount()))
@@ -547,8 +642,15 @@ class MainWindow(QMainWindow):
 
     @Slot(int, str, object)
     def update_database_record(self, record_id, column, value):
+        # 現在の値を取得（履歴用）
+        old_value = self.db_handler.get_record_value(record_id, column)
+        
         success = self.db_handler.update_record(record_id, column, value)
         if success:
+            # 履歴に追加（old_valueとvalueが異なる場合のみ）
+            if old_value != value:
+                self.add_to_history(record_id, column, old_value, value)
+            
             self.status_label.setText(f"レコード {record_id} の {column} を更新しました。")
             # データベース更新後の全データ再読み込みを軽量化
             # チェックボックス系の更新では未処理リストのみを更新
