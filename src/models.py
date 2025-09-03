@@ -383,11 +383,17 @@ class CleaningInstructionTableModel(BaseTableModel):
         if record_id is None: return False
 
         if col_name in ["cleaning_instruction", "notes"]:
+            # UI更新を即座に実行
             self._data[row][col_name] = value
-            self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
+            
+            # データベース更新を非同期で実行（次のイベントループで実行）
+            QTimer.singleShot(0, lambda: self.db_update_signal.emit(record_id, col_name, value))
+            
+            # 洗浄指示更新時は未処理リスト更新も少し遅らせて実行
             if col_name == "cleaning_instruction":
-                self.data_changed_for_unprocessed_list.emit()
+                QTimer.singleShot(10, lambda: self.data_changed_for_unprocessed_list.emit())
+            
             return True
         return False
 

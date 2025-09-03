@@ -555,9 +555,11 @@ class MainWindow(QMainWindow):
             if column in ["manufacturing_check", "cleaning_check"]:
                 # 未処理リストのみ非同期で更新（重い全データ再読み込みを回避）
                 QTimer.singleShot(50, self._refresh_unprocessed_only)
-            elif column == "notes":
-                # 備考更新時は再読み込み不要（すでにモデルに反映済み）
-                pass
+            elif column in ["notes", "cleaning_instruction"]:
+                # 備考・洗浄指示更新時は再読み込み不要（すでにモデルに反映済み）
+                # 洗浄指示の場合は未処理リストのみ更新
+                if column == "cleaning_instruction":
+                    QTimer.singleShot(50, self._refresh_unprocessed_only)
             else:
                 # その他のカラム更新時のみ全データ再読み込み
                 self.load_data_for_selected_date()
