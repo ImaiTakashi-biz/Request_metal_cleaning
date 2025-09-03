@@ -158,23 +158,6 @@ class BaseTableModel(QAbstractTableModel):
             return set_date == logical_yesterday
         except (ValueError, TypeError): return False
 
-    def _get_set_checkbox_color(self, row_data):
-        if not self._is_set_logically(row_data): return None
-        completion_date_str = row_data.get("completion_date")
-        acquisition_date_str = row_data.get("acquisition_date")
-        colors = self._config.get("colors", {})
-        try:
-            acquisition_date = datetime.date.fromisoformat(str(acquisition_date_str).split(' ')[0])
-            if not completion_date_str:
-                return QColor(colors.get("set_fg_other_day", "#FFFF00"))
-            completion_date = datetime.date.fromisoformat(str(completion_date_str).split(' ')[0])
-            if completion_date == acquisition_date:
-                return QColor(colors.get("set_fg_today", "#0000FF"))
-            else:
-                return QColor(colors.get("set_fg_other_day", "#FFFF00"))
-        except (ValueError, TypeError):
-            return QColor(colors.get("set_fg_other_day", "#FFFF00"))
-
 class MainTableModel(BaseTableModel):
     """Mainページ用のテーブルモデル"""
     def __init__(self, data=None, config=None, parent=None):
@@ -456,8 +439,6 @@ class UnprocessedMachineNumbersTableModel(QAbstractTableModel):
         
         for line_char in self._filtered_data:
             self._filtered_data[line_char].sort(key=natural_sort_key)
-
-        print(f"UnprocessedModel ({self._check_column}) filtered data: {self._filtered_data}") # Debug print
 
         self.endResetModel()
 

@@ -1,5 +1,4 @@
 import sys
-import sys
 import collections
 from PySide6.QtWidgets import (
     QMainWindow, QApplication, QWidget, QVBoxLayout, 

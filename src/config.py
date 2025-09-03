@@ -29,13 +29,3 @@ def load_config():
     except json.JSONDecodeError:
         print(f"Error: Could not decode JSON from {config_file}")
         return None
-
-# --- 使用例とテスト ---
-if __name__ == '__main__':
-    settings = load_config()
-    if settings:
-        print("Configuration loaded successfully:")
-        print(f"Config file path: {get_config_file_path()}")
-        print(f"Keys found: {list(settings.keys())}")
-    else:
-        print("Failed to load configuration")

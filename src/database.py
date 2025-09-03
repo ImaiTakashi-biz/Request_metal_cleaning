@@ -1,5 +1,4 @@
 import sqlite3
-import sqlite3
 import os
 
 class DatabaseHandler:
@@ -136,4 +135,3 @@ class DatabaseHandler:
         except sqlite3.Error as e:
             print(f"Failed to get record value: {e}")
             return None
-
