@@ -231,7 +231,15 @@ class MainTableModel(BaseTableModel):
                 font.setBold(True)
                 return font
 
+        if role == Qt.ForegroundRole:
+            # 備考カラムのテキスト色を赤に設定
+            if col_name == 'notes':
+                return QColor(Qt.red)
+
         if role == Qt.BackgroundRole:
+            # 洗浄チェックがTRUEの場合、機番以外の背景色を薄い紺色に設定
+            if bool(row_data.get("cleaning_check")) and col_name != 'machine_no':
+                return QColor("#B3C6E7")  # 薄い紺色（テキストが見やすい色）
             if col_name == 'machine_no':
                 instruction = str(row_data.get("cleaning_instruction", ""))
                 color_map = self._config.get("colors", {})
