@@ -37,7 +37,9 @@ class EditableComboBoxDelegate(QStyledItemDelegate):
 
     def setEditorData(self, editor, index):
         value = index.model().data(index, Qt.EditRole)
-        editor.setCurrentText(str(value))
+        # Noneの場合は空文字列を設定、その他は文字列に変換
+        display_value = "" if value is None else str(value)
+        editor.setCurrentText(display_value)
 
     def setModelData(self, editor, model, index):
         text_value = editor.currentText()
@@ -409,9 +411,25 @@ class UnprocessedMachineNumbersTableModel(QAbstractTableModel):
                     line_char = machine_no[0]
                     self._filtered_data[line_char].append(machine_no)
         
-        # 各ラインの機番をソート
+        # 各ラインの機番をソート（数値順）
+        def natural_sort_key(machine_no):
+            """機番を数値順にソートするためのキー関数 (例: D-1, D-2, D-3, D-10)"""
+            try:
+                # ハイフンで分割して数値部分を取得
+                parts = machine_no.split('-')
+                if len(parts) >= 2:
+                    prefix = parts[0]  # アルファベット部分 (D, A など)
+                    number = int(parts[1])  # 数値部分
+                    return (prefix, number)
+                else:
+                    # ハイフンがない場合は文字列としてソート
+                    return (machine_no, 0)
+            except (ValueError, IndexError):
+                # 数値変換に失敗した場合は文字列としてソート
+                return (machine_no, 0)
+        
         for line_char in self._filtered_data:
-            self._filtered_data[line_char].sort()
+            self._filtered_data[line_char].sort(key=natural_sort_key)
 
         print(f"UnprocessedModel ({self._check_column}) filtered data: {self._filtered_data}") # Debug print
 

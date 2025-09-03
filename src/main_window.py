@@ -160,13 +160,13 @@ class MainWindow(QMainWindow):
         main_page_layout = QHBoxLayout(main_page_widget)
         self.main_table_view_left = QTableView()
         self.main_table_view_left.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.main_table_view_left.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_left.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.main_table_view_center = QTableView()
         self.main_table_view_center.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.main_table_view_center.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_center.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.main_table_view_right = QTableView()
         self.main_table_view_right.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.main_table_view_right.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.main_table_view_right.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         main_page_layout.addWidget(self.main_table_view_left, 0, Qt.AlignTop)
         main_page_layout.addWidget(self.main_table_view_center, 0, Qt.AlignTop)
         main_page_layout.addWidget(self.main_table_view_right, 0, Qt.AlignTop)
@@ -577,7 +577,6 @@ class MainWindow(QMainWindow):
             font-weight: 600;
             border-radius: 8px;
             min-width: 120px;
-            transition: background-color 0.3s ease;
         }}
         QPushButton:hover {{
             background-color: {design.get("button_hover_color")};
