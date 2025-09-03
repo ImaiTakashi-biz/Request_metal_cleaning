@@ -440,6 +440,22 @@ class MainWindow(QMainWindow):
     def refresh_unprocessed_list_from_model(self):
         self.load_data_for_selected_date()
 
+    def _refresh_unprocessed_only(self):
+        """未処理リストのみを軽量更新するメソッド"""
+        selected_date = self.date_edit.date().toString("yyyy-MM-dd")
+        data, error = self.db_handler.get_data_by_date(selected_date)
+        
+        if not error and data:
+            # 未処理リストのみ更新（メインテーブルは更新しない）
+            self.manufacturing_unprocessed_model.load_data(data)
+            self.cleaning_unprocessed_model.load_data(data)
+            
+            # 未処理リストのテーブルサイズ調整
+            self._adjust_table_height(self.manufacturing_unprocessed_table_view)
+            self._adjust_table_height(self.cleaning_unprocessed_table_view)
+            self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
+            self.cleaning_unprocessed_table_view.resizeColumnsToContents()
+
     @Slot()
     def connect_to_db_and_load_data(self):
         if self.db_handler.connect():
@@ -534,9 +550,20 @@ class MainWindow(QMainWindow):
         success = self.db_handler.update_record(record_id, column, value)
         if success:
             self.status_label.setText(f"レコード {record_id} の {column} を更新しました。")
-            self.load_data_for_selected_date()
+            # データベース更新後の全データ再読み込みを軽量化
+            # チェックボックス系の更新では未処理リストのみを更新
+            if column in ["manufacturing_check", "cleaning_check"]:
+                # 未処理リストのみ非同期で更新（重い全データ再読み込みを回避）
+                QTimer.singleShot(50, self._refresh_unprocessed_only)
+            elif column == "notes":
+                # 備考更新時は再読み込み不要（すでにモデルに反映済み）
+                pass
+            else:
+                # その他のカラム更新時のみ全データ再読み込み
+                self.load_data_for_selected_date()
         else:
             self.status_label.setText(f"レコード {record_id} の更新に失敗しました。")
+            # 失敗時は整合性のため全データ再読み込み
             self.load_data_for_selected_date()
 
     def show_critical_error(self, message):

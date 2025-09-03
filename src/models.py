@@ -276,17 +276,28 @@ class MainTableModel(BaseTableModel):
 
         if role == Qt.CheckStateRole and col_name in ["manufacturing_check", "cleaning_check", "previous_day_set"]:
             new_value = bool(value)
+            
+            # UI更新を即座に実行
             self._data[row][col_name] = new_value
-            self.db_update_signal.emit(record_id, col_name, new_value)
             self.dataChanged.emit(index, index, [role])
+            
+            # データベース更新を非同期で実行（次のイベントループで実行）
+            QTimer.singleShot(0, lambda: self.db_update_signal.emit(record_id, col_name, new_value))
+            
+            # 未処理リスト更新も少し遅らせて実行（データベース更新の後に実行されるように）
             if col_name in ["manufacturing_check", "cleaning_check"]:
-                self.data_changed_for_unprocessed_list.emit()
+                QTimer.singleShot(10, lambda: self.data_changed_for_unprocessed_list.emit())
+            
             return True
 
         if role == Qt.EditRole and col_name == "notes":
+            # 備考欄も同様に非同期化
             self._data[row][col_name] = value
-            self.db_update_signal.emit(record_id, col_name, value)
             self.dataChanged.emit(index, index, [role])
+            
+            # データベース更新を非同期で実行
+            QTimer.singleShot(0, lambda: self.db_update_signal.emit(record_id, col_name, value))
+            
             return True
 
         return False
