@@ -536,6 +536,9 @@ class MainWindow(QMainWindow):
 
     def _refresh_unprocessed_only(self):
         """未処理リストのみを軽量更新するメソッド"""
+        # スクロール位置を保存
+        scroll_positions = self._save_scroll_positions()
+        
         selected_date = self.date_edit.date().toString("yyyy-MM-dd")
         data, error = self.db_handler.get_data_by_date(selected_date)
         
@@ -550,6 +553,9 @@ class MainWindow(QMainWindow):
             self.manufacturing_unprocessed_table_view.resizeColumnsToContents()
             self.cleaning_unprocessed_table_view.resizeColumnsToContents()
 
+        # スクロール位置を復元
+        self._restore_scroll_positions(scroll_positions)
+
     @Slot()
     def connect_to_db_and_load_data(self):
         if self.db_handler.connect():
@@ -558,8 +564,34 @@ class MainWindow(QMainWindow):
         else:
             self.show_critical_error(f"データベース接続に失敗しました。\nパスを確認してください: {self.config['database']['path']}")
 
+    def _save_scroll_positions(self):
+        """各テーブルビューのスクロール位置を保存"""
+        scroll_positions = {}
+        for view in self.all_table_views:
+            if hasattr(view, 'objectName'):
+                name = view.objectName()
+                if name:
+                    scroll_positions[name] = {
+                        'horizontal': view.horizontalScrollBar().value(),
+                        'vertical': view.verticalScrollBar().value()
+                    }
+        return scroll_positions
+
+    def _restore_scroll_positions(self, scroll_positions):
+        """保存したスクロール位置を復元"""
+        for view in self.all_table_views:
+            if hasattr(view, 'objectName'):
+                name = view.objectName()
+                if name and name in scroll_positions:
+                    pos = scroll_positions[name]
+                    view.horizontalScrollBar().setValue(pos['horizontal'])
+                    view.verticalScrollBar().setValue(pos['vertical'])
+
     @Slot()
     def load_data_for_selected_date(self):
+        # スクロール位置を保存
+        scroll_positions = self._save_scroll_positions()
+
         selected_date = self.date_edit.date().toString("yyyy-MM-dd")
         self.status_label.setText(f"{selected_date} のデータを読み込み中...")
 
@@ -604,6 +636,9 @@ class MainWindow(QMainWindow):
                     self.cleaning_table_view.setColumnWidth(notes_col_index, 85)
                 except (ValueError, AttributeError):
                     pass
+
+        # スクロール位置を復元
+        self._restore_scroll_positions(scroll_positions)
 
     @Slot()
     def handle_copy_instructions(self):
@@ -663,11 +698,19 @@ class MainWindow(QMainWindow):
                     QTimer.singleShot(50, self._refresh_unprocessed_only)
             else:
                 # その他のカラム更新時のみ全データ再読み込み
+                # スクロール位置を維持するために、現在のスクロール位置を保存
+                scroll_positions = self._save_scroll_positions()
                 self.load_data_for_selected_date()
+                # スクロール位置を復元
+                QTimer.singleShot(0, lambda: self._restore_scroll_positions(scroll_positions))
         else:
             self.status_label.setText(f"レコード {record_id} の更新に失敗しました。")
             # 失敗時は整合性のため全データ再読み込み
+            # スクロール位置を維持するために、現在のスクロール位置を保存
+            scroll_positions = self._save_scroll_positions()
             self.load_data_for_selected_date()
+            # スクロール位置を復元
+            QTimer.singleShot(0, lambda: self._restore_scroll_positions(scroll_positions))
 
     def show_critical_error(self, message):
         msg_box = QMessageBox()
